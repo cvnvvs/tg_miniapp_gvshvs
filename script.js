@@ -1,5 +1,5 @@
 // ВАЖНО: Перед запуском ngrok, вставьте сюда его HTTPS URL
-const API_BASE_URL = 'https://your-ngrok-https-url.ngrok-free.app'; 
+const API_BASE_URL = 'https://5e26-92-246-137-15.ngrok-free.app'; 
 
 const tg = window.Telegram.WebApp;
 
