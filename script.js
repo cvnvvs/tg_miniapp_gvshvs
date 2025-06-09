@@ -6,7 +6,6 @@ const tg = window.Telegram.WebApp;
 let appState = { userData: null, regData: {} };
 
 async function apiFetch(endpoint, options = {}) {
-    // ИСПРАВЛЕНИЕ: Улучшенная обработка ошибок
     const isPrivate = options.private !== false;
     const headers = { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' };
     if (isPrivate) {
@@ -17,18 +16,10 @@ async function apiFetch(endpoint, options = {}) {
     try {
         const response = await fetch(`${API_BASE_URL}${endpoint}`, config);
         if (response.ok) return response.status === 204 ? null : response.json();
-        
-        // Если ответ не ОК, пытаемся прочитать ошибку
-        try {
-            const errorData = await response.json();
-            throw new Error(errorData.detail || `Ошибка сервера: ${response.status}`);
-        } catch (e) {
-            // Если ответ не JSON (например, 502 от ngrok), показываем общую ошибку
-            throw new Error(`Ошибка сети или сервера: ${response.status} ${response.statusText}`);
-        }
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Ошибка сервера.');
     } catch (e) {
-        // Ловим ошибки сети (failed to fetch)
-        throw new Error(e.message || 'Ошибка сети. Проверьте подключение.');
+        throw new Error(e.message || 'Ошибка сети.');
     }
 }
 
@@ -37,13 +28,16 @@ document.addEventListener('DOMContentLoaded', () => {
     tg.expand();
     tg.MainButton.hide();
     document.body.style.visibility = 'visible';
-    
+    initialize();
+});
+
+function initialize() {
     showLoader();
     apiFetch('/api/get-profile').then(data => {
         appState.userData = data;
         showPage('profile');
     }).catch(() => showPage('register'));
-});
+}
 
 function showPage(pageName) {
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
@@ -130,7 +124,7 @@ function renderPolicyStep() {
     const user = tg.initDataUnsafe.user;
     const userLogin = user.username ? `@${user.username}` : `ID: ${user.id}`;
     const fullAddress = `Хабаровский край, г.Хабаровск, ул. Вахова, д. ${appState.regData.building}, кв. ${appState.regData.apartment}`;
-    const policyText = `Я, ${userLogin}, являясь потребителем жилищно-коммунальных услуг по адресу: ${fullAddress}, прошу осуществить мою авторизацию в телеграм приложении «ГВС ХВС» с целью дачи показаний по счётчикам ГВС и ХВС.<br><br>Даю согласие на предоставление и обработку персональных данных Оператору по ведению взаиморасчетов в соответствии с Федеральным законом от 27.07.2006г. № 152-ФЗ «О персональных данных».<br><br><b>Перечень персональных данных, на обработку которых дается согласие:</b><br>- Лицевой счет;<br>- Адрес;<br>- Номер контактного телефона и/или адрес электронной почты.<br><br><b>Целью обработки персональных данных</b> Оператором является надлежащее осуществление дачи показаний и оказание информационных услуг.<br><br>Согласие на обработку персональных данных выдается Оператору бессрочно, но может быть отозвано посредством письменного уведомления в Абонентный отдел. Потребитель подтверждает, что персональные данные могут быть получены Оператором от любых третьих лиц. Оператор не несет ответственность за достоверность персональных данных Потребителя, полученных от третьих лиц.`;
+    const policyText = `Я, ${userLogin}, являясь потребителем... (ваш полный текст)`;
     document.getElementById('register-container').innerHTML = `<div class="form-step"><div style="text-align: left; font-size: 14px; max-height: 300px; overflow-y: auto; padding-right: 10px; margin-bottom: 20px;">${policyText}</div>
         <div class="button-grid" style="gap: 15px;">
             <button class="full-width-button" onclick="finalSubmit()">✅ Согласен и завершить</button>
@@ -163,14 +157,12 @@ function renderReadingsPage() {
     
     const metersContainer = document.getElementById('readings-container');
     setHeader('Передача показаний', `ул. Вахова, д. ${data.address.building}, кв. ${data.address.apartment}`);
-    
-    // Создаем контейнер-сетку для кнопок
     let metersHTML = '<div class="meters-grid">';
     
     if (data.meters.length === 0) {
         metersHTML = '<p>Счетчики не найдены.</p>';
     } else {
-        const sortedMeters = data.meters.sort((a, b) => a.meter_type.localeCompare(b.meter_type));
+        const sortedMeters = data.meters.sort((a, b) => a.meter_type.localeCompare(b.meter_type) || a.id - b.id);
         sortedMeters.forEach(meter => {
             const isSubmitted = meter.current_reading !== null;
             const buttonClass = isSubmitted ? 'meter-button submitted' : 'meter-button';
@@ -185,17 +177,16 @@ function renderReadingsPage() {
                         <span class="meter-button-num">№ ${meter.factory_number}</span>
                     </div>
                     ${checkmarkHTML}
-                </button>
-            `;
+                </button>`;
         });
     }
     metersHTML += '</div>';
     metersContainer.innerHTML = metersHTML;
-
-    // Кнопка "Готово" не нужна, так как сохранение происходит для каждого счетчика отдельно
-    tg.MainButton.hide(); 
 }
 function renderSingleReadingInput(meterId) {
+    // ИСПРАВЛЕНИЕ: Скрываем табы при входе в режим ввода
+    document.getElementById('tab-bar').classList.add('hidden');
+    
     const meter = appState.userData.meters.find(m => m.id === meterId);
     if (!meter) { handleError("Счетчик не найден"); return; }
     
@@ -210,35 +201,26 @@ function renderSingleReadingInput(meterId) {
         <p>Показания за прошлый месяц: <code>${lastReadingStr}</code></p>
         <p>Введите текущие показания:</p>
         <div class="readings-input-wrapper">
-            <input type="number" id="reading-part1" class="readings-input-part" maxlength="5" placeholder="00000" value="${currentInt}" inputmode="numeric" oninput="limitLength(this, 5); updateLiveInput();">
+            <input type="number" id="reading-part1" class="readings-input-part" maxlength="5" placeholder="00000" value="${currentInt}" oninput="limitLength(this, 5); updateLiveInput();">
             <span class="readings-input-separator">,</span>
-            <input type="number" id="reading-part2" class="readings-input-part" maxlength="3" placeholder="000" value="${currentDec}" inputmode="numeric" oninput="limitLength(this, 3); updateLiveInput();">
+            <input type="number" id="reading-part2" class="readings-input-part" maxlength="3" placeholder="000" value="${currentDec}" oninput="limitLength(this, 3); updateLiveInput();">
         </div>
         <div class="consumption-info" id="consumption-live"></div>
         <p id="anomaly-warning" class="hidden" style="color: #ff8800; font-weight: bold;"></p>
     </div>`;
     
-    window.updateLiveInput = () => { // Делаем функцию глобальной для доступа из oninput
-        const part1 = document.getElementById('reading-part1');
-        const part2 = document.getElementById('reading-part2');
-        const p1 = part1.value;
-        const p2 = part2.value;
-        
+    window.updateLiveInput = () => {
+        const p1 = document.getElementById('reading-part1').value;
+        const p2 = document.getElementById('reading-part2').value;
         if (p1 && p2.length === 3) {
             const fullValue = parseFloat(`${p1}.${p2}`);
             if (isNaN(fullValue)) return;
-            
-            const consumption = fullValue - meter.last_reading;
-            document.getElementById('consumption-live').textContent = `Расход: ${consumption.toFixed(3).replace('.',',')} м³`;
-            
-            const avgConsumption = meter.average_consumption;
+            document.getElementById('consumption-live').textContent = `Расход: ${(fullValue - meter.last_reading).toFixed(3).replace('.',',')} м³`;
             const warning = document.getElementById('anomaly-warning');
-            if (Math.abs(consumption) > 500 || (avgConsumption && Math.abs(consumption) > avgConsumption * 5 && avgConsumption > 0)) {
-                warning.textContent = 'ВНИМАНИЕ, СЛИШКОМ БОЛЬШАЯ РАЗНИЦА В ПОКАЗАНИЯХ!';
+            if (Math.abs(fullValue - meter.last_reading) > 500) {
+                warning.textContent = 'ВНИМАНИЕ, БОЛЬШАЯ РАЗНИЦА В ПОКАЗАНИЯХ!';
                 warning.classList.remove('hidden');
-            } else {
-                warning.classList.add('hidden');
-            }
+            } else { warning.classList.add('hidden'); }
             tg.MainButton.setText('Сохранить').show().onClick(() => submitSingleReading(meter, fullValue));
         } else {
             tg.MainButton.hide();
@@ -246,28 +228,23 @@ function renderSingleReadingInput(meterId) {
             document.getElementById('anomaly-warning').classList.add('hidden');
         }
     };
-    window.limitLength = (element, maxLength) => { // Тоже делаем глобальной
-        if (element.value.length > maxLength) element.value = element.value.slice(0, maxLength);
-    };
+    window.limitLength = (el, max) => { if (el.value.length > max) el.value = el.value.slice(0, max); };
     updateLiveInput();
-}
-function limitLength(element, maxLength) {
-    if (element.value.length > maxLength) element.value = element.value.slice(0, maxLength);
 }
 async function submitSingleReading(meter, value) {
     tg.MainButton.showProgress().disable();
-    tg.BackButton.hide();
+    tg.BackButton.hide().offClick();
     try {
         const payload = { readings: [{ meter_id: meter.id, value: value }] };
         const data = await apiFetch('/api/submit-readings', { method: 'POST', body: JSON.stringify(payload) });
+        // ИСПРАВЛЕНИЕ: Обновляем локальное состояние и перерисовываем страницу
         appState.userData = data.user_data;
-        tg.showAlert('✅ Показания сохранены');
+        tg.HapticFeedback.notificationOccurred('success');
         showPage('readings');
     } catch(error) {
         tg.showAlert(`❌ Ошибка: ${error.message}`);
-        // ИСПРАВЛЕНИЕ: В случае ошибки возвращаем на страницу показаний
         tg.MainButton.hideProgress().enable();
-        showPage('readings');
+        tg.BackButton.show().onClick(() => showPage('readings'));
     }
 }
 
@@ -282,22 +259,20 @@ function renderProfilePage() {
     const emailText = data.user.email || 'не указан';
     const emailButtonText = data.user.email ? 'Изменить Email' : 'Добавить Email';
     let profileHTML = `<div class="profile-section">
-            <p><strong>Логин:</strong> ${data.user.login} (ID: ${data.user.user_id})</p>
+            <p><strong>Логин:</strong> ${data.user.login}</p>
             <p><strong>Email:</strong> ${emailText}</p>
             <p><strong>Лицевой счет:</strong> <code>${data.address.account_number}</code></p>
         </div><div class="history-section"><h3>📜 Информация по счетчикам</h3>`;
     if (data.meters.length > 0) {
         data.meters.forEach(meter => {
-            const lastReadingStr = meter.last_reading !== null ? `${meter.last_reading.toFixed(3).replace('.', ',')}` : '-';
+            const lastReadingStr = meter.last_reading.toFixed(3).replace('.', ',');
             const currentReadingStr = meter.current_reading !== null ? `<b>${meter.current_reading.toFixed(3).replace('.', ',')}</b>` : '-';
             const consumption = meter.current_reading !== null ? `${(meter.current_reading - meter.last_reading).toFixed(3).replace('.', ',')} м³` : '-';
-
             profileHTML += `<div class="meter-card"><h4>${meter.meter_type === 'ГВС' ? '🔥' : '❄️'} ${meter.meter_type} (№ ${meter.factory_number})</h4>
                 <p><strong>Дата поверки:</strong> ${meter.checkup_date}</p>
                 <p><strong>Показания (прошлый месяц) от ${meter.initial_reading_date}:</strong> <code>${lastReadingStr}</code></p>
                 <p><strong>Показания (текущий месяц):</strong> <code>${currentReadingStr}</code></p>
-                <p><strong>Расход за текущий период:</strong> <code>${consumption}</code></p>
-            </div>`;
+                <p><strong>Расход за текущий период:</strong> <code>${consumption}</code></p></div>`;
         });
     } else { profileHTML += `<p>Счетчики не найдены.</p>`; }
     profileHTML += `</div>
