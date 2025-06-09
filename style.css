@@ -38,3 +38,14 @@ body {
 .button-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 20px; }
 .grid-button { padding: 15px; border: none; border-radius: 8px; background-color: var(--tg-theme-bg-color); color: var(--tg-theme-link-color); font-size: 18px; font-weight: 500; cursor: pointer; }
 .form-step input { width: 100%; box-sizing: border-box; padding: 15px; font-size: 18px; border-radius: 8px; border: 1px solid var(--tg-theme-hint-color); background-color: var(--tg-theme-bg-color); color: var(--tg-theme-text-color); text-align: center; }
+.full-width-button {
+    width: 100%; /* Занимает всю ширину грид-контейнера */
+    padding: 15px;
+    border: none;
+    border-radius: 8px;
+    background-color: var(--tg-theme-button-color); /* Используем основной цвет кнопки */
+    color: var(--tg-theme-button-text-color); /* Используем основной цвет текста кнопки */
+    font-size: 18px;
+    font-weight: 600; /* Делаем текст жирнее */
+    cursor: pointer;
+}
