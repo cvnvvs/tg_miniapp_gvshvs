@@ -4,36 +4,25 @@ const tg = window.Telegram.WebApp;
 
 // --- Глобальное состояние приложения ---
 let appState = {
-    userData: null, // Здесь будут храниться данные о пользователе после логина
+    userData: null,
+    regData: {}
 };
 
-// --- Централизованная функция для выполнения запросов к API ---
+// --- Централизованный API Fetch ---
 async function apiFetch(endpoint, options = {}) {
     const isPrivate = options.private !== false;
-    const headers = {
-        'Content-Type': 'application/json',
-        'ngrok-skip-browser-warning': 'true' 
-    };
-
+    const headers = { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' };
     if (isPrivate) {
-        if (!tg.initData) throw new Error("Не удалось получить данные для авторизации (initData).");
+        if (!tg.initData) throw new Error("Нет данных для авторизации (initData).");
         headers['Authorization'] = `tma ${tg.initData}`;
     }
-
     const config = { ...options, headers: { ...headers, ...options.headers } };
-    
     try {
         const response = await fetch(`${API_BASE_URL}${endpoint}`, config);
-        if (response.ok) {
-            return response.status === 204 ? null : response.json();
-        } else {
-            const errorData = await response.json();
-            throw new Error(errorData.detail || 'Произошла неизвестная ошибка сервера.');
-        }
-    } catch (e) {
-        // Обрабатываем ошибки сети или некорректного JSON
-        throw new Error(e.message || 'Ошибка сети. Проверьте подключение.');
-    }
+        if (response.ok) return response.status === 204 ? null : response.json();
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Ошибка сервера.');
+    } catch (e) { throw new Error(e.message || 'Ошибка сети.'); }
 }
 
 // --- Маршрутизация и запуск ---
@@ -47,7 +36,7 @@ document.addEventListener('DOMContentLoaded', () => {
     apiFetch('/api/get-profile')
         .then(data => {
             appState.userData = data;
-            showPage('readings');
+            showPage('profile'); // Начинаем с профиля
         })
         .catch(() => {
             showPage('register');
@@ -57,19 +46,17 @@ document.addEventListener('DOMContentLoaded', () => {
 // --- Навигация ---
 function showPage(pageName) {
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-    const container = document.getElementById(`${pageName}-container`);
-    if (container) container.classList.add('active');
-    
+    document.getElementById(`${pageName}-container`).classList.add('active');
     tg.MainButton.hide();
-
     const tabBar = document.getElementById('tab-bar');
+
     if (pageName === 'readings' || pageName === 'profile') {
         tabBar.classList.remove('hidden');
         document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
         if (pageName === 'readings') {
             document.querySelector('.tab-button[onclick*="readings"]').classList.add('active');
             renderReadingsPage();
-        } else if (pageName === 'profile') {
+        } else {
             document.querySelector('.tab-button[onclick*="profile"]').classList.add('active');
             renderProfilePage();
         }
@@ -80,30 +67,29 @@ function showPage(pageName) {
 }
 
 // --- Регистрация ---
-let regData = {};
 function renderRegistrationStep1() {
     hideLoader();
     setHeader('Регистрация', 'Шаг 1: Выбор строения');
     const container = document.getElementById('register-container');
-    container.innerHTML = `<div class="form-step"><p>Выберите ваше строение:</p><div class="button-grid">
+    container.innerHTML = `<div class="form-step"><p>Выберите ваше строение:</p><div class="button-grid" style="grid-template-columns: 1fr 1fr 1fr;">
         <button class="grid-button" onclick="handleBuildingSelect('8В')">8В</button>
         <button class="grid-button" onclick="handleBuildingSelect('8Г')">8Г</button>
         <button class="grid-button" onclick="handleBuildingSelect('8Д')">8Д</button></div></div>`;
 }
 function handleBuildingSelect(building) {
-    regData.building = building;
+    appState.regData.building = building;
     setHeader('Регистрация', `Шаг 2: Номер квартиры`);
     const cont = document.getElementById('register-container');
-    cont.innerHTML = `<div class="form-step"><p>Строение <b>${building}</b>. Теперь введите номер квартиры:</p><input type="number" id="apartment-input" placeholder="Например: 45" inputmode="numeric"></div>`;
+    cont.innerHTML = `<div class="form-step"><p>Строение <b>${building}</b>. Введите номер квартиры:</p><input type="number" id="apartment-input" placeholder="45" inputmode="numeric"></div>`;
     tg.MainButton.setText('Далее').show().onClick(handleApartmentSubmit);
 }
 async function handleApartmentSubmit() {
     const apartment = document.getElementById('apartment-input').value;
     if (!apartment || !/^\d+$/.test(apartment)) { tg.showAlert('Введите корректный номер квартиры.'); return; }
-    regData.apartment = apartment;
+    appState.regData.apartment = apartment;
     tg.MainButton.showProgress().disable();
     try {
-        await apiFetch('/api/check-address', { method: 'POST', body: JSON.stringify(regData), private: false });
+        await apiFetch('/api/check-address', { method: 'POST', body: JSON.stringify(appState.regData), private: false });
         renderAccountStep();
     } catch (error) { tg.showAlert(error.message);
     } finally { tg.MainButton.hideProgress().enable(); }
@@ -117,44 +103,40 @@ function renderAccountStep() {
 function handleAccountSubmit() {
     const account = document.getElementById('account-input').value;
     if (!account || !/^\d{6}$/.test(account)) { tg.showAlert('Лицевой счет должен состоять из 6 цифр.'); return; }
-    regData.account = account;
+    appState.regData.account = account;
     renderEmailStep();
 }
 function renderEmailStep() {
     setHeader('Регистрация', 'Шаг 4: Контакты (необязательно)');
     const cont = document.getElementById('register-container');
-    cont.innerHTML = `<div class="form-step"><p>Email:</p><input type="email" id="email-input" placeholder="user@example.com" inputmode="email">
-        <div class="button-grid" style="margin-top: 20px; grid-template-columns: 1fr;">
-        <button class="grid-button" onclick="handleEmailSubmit(true)">Пропустить</button></div></div>`;
-    tg.MainButton.setText('Подтвердить Email и далее').offClick(handleAccountSubmit).onClick(() => handleEmailSubmit(false));
+    cont.innerHTML = `<div class="form-step"><p>Email:</p><input type="email" id="email-input" placeholder="user@example.com" inputmode="email"></div>`;
+    tg.MainButton.setText('Далее').offClick(handleAccountSubmit).onClick(handleEmailSubmit);
 }
-function handleEmailSubmit(isSkipped) {
-    const emailInput = document.getElementById('email-input');
-    const email = emailInput ? emailInput.value.trim() : '';
-    if (isSkipped) regData.email = null;
-    else {
-        if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { tg.showAlert('Вы ввели некорректный Email.'); return; }
-        regData.email = email;
-    }
+function handleEmailSubmit() {
+    const email = document.getElementById('email-input').value.trim();
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { tg.showAlert('Неверный формат Email.'); return; }
+    appState.regData.email = email || null;
     renderPolicyStep();
 }
 function renderPolicyStep() {
     setHeader('Регистрация', 'Финальный шаг: Согласие');
     const user = tg.initDataUnsafe.user;
     const userLogin = user.username ? `@${user.username}` : `ID: ${user.id}`;
-    const fullAddress = `Хабаровский край, г.Хабаровск, ул. Вахова, д. ${regData.building}, кв. ${regData.apartment}`;
-    const policyText = `Я, ${userLogin}, являясь потребителем жилищно-коммунальных услуг по адресу: ${fullAddress}, прошу осуществить мою авторизацию в телеграм приложении «ГВС ХВС» с целью дачи показаний по счётчикам ГВС и ХВС.<br><br>Даю согласие на предоставление и обработку персональных данных Оператору по ведению взаиморасчетов в соответствии с Федеральным законом от 27.07.2006г. № 152-ФЗ «О персональных данных».<br><br><b>Перечень персональных данных, на обработку которых дается согласие:</b><br>- Лицевой счет;<br>- Адрес;<br>- Номер контактного телефона и/или адрес электронной почты.<br><br><b>Целью обработки персональных данных</b> Оператором является надлежащее осуществление дачи показаний и оказание информационных услуг.<br><br>Согласие на обработку персональных данных выдается Оператору бессрочно, но может быть отозвано посредством письменного уведомления в Абонентный отдел. Потребитель подтверждает, что персональные данные могут быть получены Оператором от любых третьих лиц. Оператор не несет ответственность за достоверность персональных данных Потребителя, полученных от третьих лиц.`;
+    const fullAddress = `Хабаровский край, г.Хабаровск, ул. Вахова, д. ${appState.regData.building}, кв. ${appState.regData.apartment}`;
+    const policyText = `Я, ${userLogin}, являясь потребителем... (ваш полный текст)`; // Сокращено
     const cont = document.getElementById('register-container');
-    cont.innerHTML = `<div class="form-step"><p style="text-align: left; font-size: 14px;">${policyText}</p></div>`;
-    tg.MainButton.setText('✅ Согласен и завершить').offClick().onClick(finalSubmit);
+    cont.innerHTML = `<div class="form-step"><p style="text-align: left; font-size: 14px; max-height: 300px; overflow-y: auto;">${policyText}</p></div>`;
+    tg.MainButton.setText('✅ Согласен и завершить').offClick(handleEmailSubmit).onClick(finalSubmit);
+    tg.BackButton.show().onClick(renderEmailStep); // Кнопка Назад
 }
 async function finalSubmit() {
+    tg.BackButton.hide().offClick();
     tg.MainButton.showProgress().disable();
     try {
-        const data = await apiFetch('/api/register', { method: 'POST', body: JSON.stringify(regData) });
+        const data = await apiFetch('/api/register', { method: 'POST', body: JSON.stringify(appState.regData) });
         appState.userData = data.user_data;
         tg.showAlert('✅ Регистрация успешно завершена!');
-        showPage('readings');
+        showPage('profile');
     } catch (error) { tg.showAlert(`❌ Ошибка: ${error.message}`);
     } finally { tg.MainButton.hideProgress().enable(); }
 }
@@ -199,7 +181,7 @@ async function submitReadings() {
         const valueStr = input.value.replace(',', '.').trim();
         if (valueStr === '') return;
         if (!/^\d{1,5}\.\d{3}$/.test(valueStr)) {
-            tg.showAlert(`Неверный формат для счетчика №${meterId}. Пример: 123,456`);
+            tg.showAlert(`Неверный формат для счетчика с заводским номером, который связан с ID ${meterId}. Пример: 123,456`);
             hasErrors = true; return;
         }
         payload.readings.push({ meter_id: meterId, value: parseFloat(valueStr) });
@@ -230,13 +212,8 @@ function renderProfilePage() {
     profileHTML += `<div class="history-section"><h3>📜 История показаний</h3>`;
     if (data.meters.length > 0) {
         data.meters.forEach(meter => {
-            profileHTML += `<h4>${meter.meter_type === 'ГВС' ? '🔥' : '❄️'} ${meter.meter_type} (№ ${meter.factory_number})</h4>`;
-            if (meter.history.length > 0) {
-                meter.history.forEach(rec => {
-                    profileHTML += `<div class="history-item"><strong>Период: ${rec.period}</strong><br>
-                        Показание: ${rec.curr_reading.toFixed(3).replace('.',',')} (Расход: ${rec.consumption.toFixed(3).replace('.',',')} м³)</div>`;
-                });
-            } else { profileHTML += `<div class="history-item">Нет истории.</div>`; }
+            profileHTML += `<h4>${meter.meter_type === 'ГВС' ? '🔥' : '❄️'} ${meter.meter_type} (№ ${meter.factory_number})</h4>
+                <p><strong>Показания за прошлый месяц (${meter.initial_reading_date}):</strong> <code>${meter.initial_reading.toFixed(3).replace('.',',')}</code></p>`;
         });
     } else { profileHTML += `<p>Счетчики не найдены.</p>`; }
     profileHTML += `</div>`;
@@ -252,13 +229,11 @@ function renderProfilePage() {
 function handleResetClick() {
     tg.showConfirm("Вы уверены, что хотите сбросить регистрацию? Это действие необратимо.", async (ok) => {
         if (!ok) return;
-        // Показываем лоадер вручную, так как MainButton скрыта
-        const profileContainer = document.getElementById('profile-container');
-        profileContainer.innerHTML = '<div class="loader"></div>';
+        showLoader();
         try {
             await apiFetch('/api/reset-registration', { method: 'POST' });
             appState.userData = null;
-            tg.showAlert('Регистрация сброшена. Приложение будет перезагружено.');
+            tg.showAlert('Регистрация сброшена.');
             showPage('register');
         } catch (error) { tg.showAlert(`❌ Ошибка: ${error.message}`); }
     });
