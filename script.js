@@ -6,7 +6,7 @@ const tg = window.Telegram.WebApp;
 // --- Централизованная функция для выполнения запросов к API ---
 async function apiFetch(endpoint, options = {}) {
     const isPrivate = options.private !== false; // Все эндпоинты приватные по умолчанию
-    const headers = { 'Content-Type': 'application/json' };
+    const headers = { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true'};
 
     if (isPrivate) {
         // Для приватных эндпоинтов добавляем заголовок авторизации
