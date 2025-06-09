@@ -1,4 +1,3 @@
-// ВАЖНО: Перед запуском ngrok, вставьте сюда его АКТУАЛЬНЫЙ HTTPS URL
 const API_BASE_URL = 'https://bunny-brave-externally.ngrok-free.app'; 
 
 const tg = window.Telegram.WebApp;
