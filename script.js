@@ -28,12 +28,15 @@ document.addEventListener('DOMContentLoaded', () => {
     document.body.style.visibility = 'visible';
     
     showLoader();
-    apiFetch('/api/get-profile').then(data => {
-        appState.userData = data;
-        showPage('profile');
-    }).catch(() => showPage('register'));
+    apiFetch('/api/get-profile')
+        .then(data => {
+            appState.userData = data;
+            showPage('profile');
+        })
+        .catch(() => showPage('register'));
 });
 
+// --- Навигация ---
 function showPage(pageName) {
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
     document.getElementById(`${pageName}-container`).classList.add('active');
@@ -44,13 +47,11 @@ function showPage(pageName) {
     if (pageName === 'readings' || pageName === 'profile') {
         tabBar.classList.remove('hidden');
         document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
-        if (pageName === 'readings') {
-            document.querySelector('.tab-button[onclick*="readings"]').classList.add('active');
-            renderReadingsPage();
-        } else {
-            document.querySelector('.tab-button[onclick*="profile"]').classList.add('active');
-            renderProfilePage();
-        }
+        const targetTab = document.querySelector(`.tab-button[onclick*="'${pageName}'"]`);
+        if (targetTab) targetTab.classList.add('active');
+        
+        if (pageName === 'readings') renderReadingsPage();
+        else renderProfilePage();
     } else {
         tabBar.classList.add('hidden');
         if (pageName === 'register') renderRegistrationStep1();
@@ -163,58 +164,97 @@ function renderReadingsPage() {
     hideLoader();
     const data = appState.userData;
     if (!data) { handleError("Не удалось загрузить данные пользователя."); return; }
+    
     const metersContainer = document.getElementById('readings-container');
-    metersContainer.innerHTML = '';
+    metersContainer.innerHTML = '<h3>Выберите счетчик для ввода показаний</h3>';
     setHeader('Передача показаний', `ул. Вахова, д. ${data.address.building}, кв. ${data.address.apartment}`);
-    if (data.meters.length === 0) { metersContainer.innerHTML = '<p>Счетчики не найдены.</p>'; return; }
+    if (data.meters.length === 0) { metersContainer.innerHTML += '<p>Счетчики не найдены.</p>'; return; }
     
     data.meters.forEach(meter => {
-        const card = document.createElement('div'); card.className = 'meter-card';
-        card.innerHTML = `<div class="meter-title">${meter.meter_type === 'ГВС' ? '🔥' : '❄️'} ${meter.meter_type}</div>
-            <div class="meter-info">Заводской № ${meter.factory_number}</div>
-            <div class="input-group">
-                <label for="meter_${meter.id}">Текущие показания (прошлые: ${meter.last_reading.toFixed(3).replace('.', ',')})</label>
-                <input type="text" id="meter_${meter.id}" inputmode="decimal" placeholder="123,456" value="${meter.current_reading ? meter.current_reading.toFixed(3).replace('.',',') : ''}">
-                <div class="consumption-info" id="consumption_${meter.id}"></div>
-            </div>`;
-        metersContainer.appendChild(card);
-        const input = card.querySelector(`#meter_${meter.id}`);
-        const consumptionDiv = card.querySelector(`#consumption_${meter.id}`);
-        const calculateConsumption = () => {
-            const currentValue = parseFloat(input.value.replace(',', '.'));
-            if (!isNaN(currentValue)) consumptionDiv.textContent = `Расход: ${(currentValue - meter.last_reading).toFixed(3).replace('.', ',')} м³`;
-            else consumptionDiv.textContent = '';
-        };
-        input.addEventListener('input', calculateConsumption);
-        calculateConsumption();
+        const checkmark = meter.current_reading !== null ? '✅' : '';
+        const button = document.createElement('button');
+        button.className = 'meter-button'; // Новый класс для стилизации
+        button.innerHTML = `${checkmark} <span class="meter-button-icon">${meter.meter_type === 'ГВС' ? '🔥' : '❄️'}</span>
+                            <span class="meter-button-type">${meter.meter_type}</span>
+                            <span class="meter-button-num">№ ${meter.factory_number}</span>`;
+        button.onclick = () => renderSingleReadingInput(meter.id);
+        metersContainer.appendChild(button);
     });
-    tg.MainButton.setText('Отправить показания').show().onClick(submitReadings);
 }
+function renderSingleReadingInput(meterId) {
+    const meter = appState.userData.meters.find(m => m.id === meterId);
+    if (!meter) { handleError("Счетчик не найден"); return; }
+    
+    tg.BackButton.show().onClick(() => showPage('readings'));
+    setHeader('Ввод показаний', `${meter.meter_type} - № ${meter.factory_number}`);
+    const container = document.getElementById('readings-container');
 
-async function submitReadings() {
-    const payload = { readings: [] };
-    const inputs = document.querySelectorAll('#readings-container input[type="text"]');
-    let hasErrors = false;
-    inputs.forEach(input => {
-        const meterId = parseInt(input.id.split('_')[1]);
-        const valueStr = input.value.replace(',', '.').trim();
-        if (valueStr === '') return;
-        if (!/^\d{1,5}\.\d{3}$/.test(valueStr)) {
-            tg.showAlert(`Неверный формат для счетчика. Пример: 123,456`);
-            hasErrors = true; return;
+    const lastReadingStr = meter.last_reading.toFixed(3).replace('.', ',');
+    const currentReadingStr = meter.current_reading ? meter.current_reading.toFixed(3).replace('.',',') : '';
+    
+    container.innerHTML = `<div class="form-step">
+        <p>Показания за прошлый месяц: <code>${lastReadingStr}</code></p>
+        <p>Введите текущие показания:</p>
+        <div class="readings-input-wrapper">
+            <input type="number" id="reading-part1" class="readings-input-part" maxlength="5" placeholder="12345" inputmode="numeric" oninput="limitLength(this, 5)">
+            <span class="readings-input-separator">,</span>
+            <input type="number" id="reading-part2" class="readings-input-part" maxlength="3" placeholder="678" inputmode="numeric" oninput="limitLength(this, 3)">
+        </div>
+        <div class="consumption-info" id="consumption-live"></div>
+        <p id="anomaly-warning" class="hidden" style="color: #ff8800; font-weight: bold;"></p>
+    </div>`;
+    
+    const part1 = document.getElementById('reading-part1');
+    const part2 = document.getElementById('reading-part2');
+    
+    const updateLive = () => {
+        const p1 = part1.value;
+        const p2 = part2.value.padEnd(3, '0');
+        if (p1 && p2.length === 3) {
+            const fullValue = parseFloat(`${p1}.${p2}`);
+            if (isNaN(fullValue)) return;
+            
+            const consumption = fullValue - meter.last_reading;
+            document.getElementById('consumption-live').textContent = `Расход: ${consumption.toFixed(3).replace('.',',')} м³`;
+            
+            const avgConsumption = meter.average_consumption;
+            const warning = document.getElementById('anomaly-warning');
+            if (Math.abs(consumption) > 500 || (avgConsumption && Math.abs(consumption) > avgConsumption * 5)) {
+                warning.textContent = 'ВНИМАНИЕ, СЛИШКОМ БОЛЬШАЯ РАЗНИЦА В ПОКАЗАНИЯХ!';
+                warning.classList.remove('hidden');
+            } else {
+                warning.classList.add('hidden');
+            }
+            tg.MainButton.setText('Сохранить').show().onClick(() => submitSingleReading(meter, fullValue));
+        } else {
+            tg.MainButton.hide();
+            document.getElementById('consumption-live').textContent = '';
+            document.getElementById('anomaly-warning').classList.add('hidden');
         }
-        payload.readings.push({ meter_id: meterId, value: parseFloat(valueStr) });
-    });
-    if (hasErrors || payload.readings.length === 0) {
-        if (!hasErrors) tg.showAlert('Вы не ввели ни одного показания.'); return;
+    };
+    part1.addEventListener('input', updateLive);
+    part2.addEventListener('input', updateLive);
+}
+function limitLength(element, maxLength) {
+    if (element.value.length > maxLength) {
+        element.value = element.value.slice(0, maxLength);
     }
+}
+async function submitSingleReading(meter, value) {
     tg.MainButton.showProgress().disable();
     try {
+        const payload = { readings: [{ meter_id: meter.id, value: value }] };
         await apiFetch('/api/submit-readings', { method: 'POST', body: JSON.stringify(payload) });
-        tg.showAlert('✅ Показания успешно отправлены!');
-        tg.close();
-    } catch (error) { tg.showAlert(`❌ ${error.message}`);
-    } finally { tg.MainButton.hideProgress().enable(); }
+        tg.showAlert('✅ Показания сохранены');
+        // Обновляем локальные данные и возвращаемся на страницу показаний
+        const updatedData = await apiFetch('/api/get-profile');
+        appState.userData = updatedData;
+        showPage('readings');
+    } catch(error) {
+        tg.showAlert(`❌ Ошибка: ${error.message}`);
+    } finally {
+        tg.MainButton.hideProgress().enable();
+    }
 }
 
 
@@ -224,45 +264,78 @@ function renderProfilePage() {
     hideLoader();
     const data = appState.userData;
     if (!data) { handleError("Не удалось загрузить данные пользователя."); return; }
+    
     const profileContainer = document.getElementById('profile-container');
     setHeader('Профиль', `ул. Вахова, д. ${data.address.building}, кв. ${data.address.apartment}`);
+    
+    const emailText = data.user.email || 'не указан';
+    const emailButtonText = data.user.email ? 'Изменить Email' : 'Добавить Email';
+
     let profileHTML = `<div class="profile-section">
-            <p><strong>Логин:</strong> ${data.user.login}</p>
-            <p><strong>Email:</strong> ${data.user.email || 'не указан'}</p>
+            <p><strong>Логин:</strong> ${data.user.login} (ID: ${data.user.user_id})</p>
+            <p><strong>Email:</strong> ${emailText}</p>
             <p><strong>Лицевой счет:</strong> <code>${data.address.account_number}</code></p>
         </div><div class="history-section"><h3>📜 Информация по счетчикам</h3>`;
+    
     if (data.meters.length > 0) {
         data.meters.forEach(meter => {
-            const lastReadingStr = meter.last_reading !== null ? `${meter.last_reading.toFixed(3).replace('.', ',')}` : '-';
+            const lastReadingStr = meter.last_reading.toFixed(3).replace('.', ',');
             const currentReadingStr = meter.current_reading !== null ? `<b>${meter.current_reading.toFixed(3).replace('.', ',')}</b>` : '-';
-            profileHTML += `<div class="meter-card"><h4>${meter.meter_type === 'ГВС' ? '🔥' : '❄️'} ${meter.meter_type} (№ ${meter.factory_number})</h4>
+            const consumption = meter.current_reading !== null ? (meter.current_reading - meter.last_reading).toFixed(3).replace('.', ',') + ' м³' : '-';
+            
+            profileHTML += `<div class="meter-card">
+                <h4>${meter.meter_type === 'ГВС' ? '🔥' : '❄️'} ${meter.meter_type} (№ ${meter.factory_number})</h4>
                 <p><strong>Дата поверки:</strong> ${meter.checkup_date}</p>
-                <p><strong>Показания (прошлый месяц):</strong> <code>${lastReadingStr}</code></p>
-                <p><strong>Показания (текущий месяц):</strong> <code>${currentReadingStr}</code></p></div>`;
+                <p><strong>Показания (прошлый месяц) от ${meter.initial_reading_date}:</strong> <code>${lastReadingStr}</code></p>
+                <p><strong>Показания (текущий месяц):</strong> <code>${currentReadingStr}</code></p>
+                <p><strong>Расход:</strong> <code>${consumption}</code></p>
+            </div>`;
         });
     } else { profileHTML += `<p>Счетчики не найдены.</p>`; }
-    profileHTML += `</div>`;
+    
+    profileHTML += `</div>
+        <div class="button-grid" style="gap: 15px;">
+            <button class="grid-button" onclick="openEmailModal()">${emailButtonText}</button>
+            <button class="full-width-button" onclick="handleResetClick()" style="background-color: #d9534f;">❌ Сменить квартиру</button>
+        </div>`;
     profileContainer.innerHTML = profileHTML;
-    const resetButton = document.createElement('button');
-    resetButton.className = 'full-width-button';
-    resetButton.textContent = '❌ Сбросить регистрацию';
-    resetButton.style.marginTop = '20px';
-    resetButton.onclick = handleResetClick;
-    profileContainer.appendChild(resetButton);
+}
+
+function openEmailModal() {
+    document.getElementById('modal-input').value = appState.userData.user.email || '';
+    document.getElementById('modal-overlay').classList.remove('hidden');
+}
+function closeModal() {
+    document.getElementById('modal-overlay').classList.add('hidden');
+}
+async function submitModal() {
+    const email = document.getElementById('modal-input').value.trim();
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        tg.showAlert('Неверный формат Email.'); return;
+    }
+    const newEmail = email || null;
+    try {
+        await apiFetch('/api/update-email', { method: 'POST', body: JSON.stringify({ email: newEmail }) });
+        appState.userData.user.email = newEmail;
+        tg.showAlert('Email успешно обновлен!');
+        closeModal();
+        renderProfilePage(); // Перерисовываем профиль с новым email
+    } catch (error) { tg.showAlert(`❌ Ошибка: ${error.message}`); }
 }
 
 function handleResetClick() {
-    tg.showConfirm("Вы уверены, что хотите сбросить регистрацию? Это действие необратимо.", async (ok) => {
+    tg.showConfirm("Вы уверены, что хотите сменить квартиру? Текущая регистрация будет сброшена.", async (ok) => {
         if (!ok) return;
         showLoader();
         try {
             await apiFetch('/api/reset-registration', { method: 'POST' });
             appState.userData = null;
-            tg.showAlert('Регистрация сброшена.');
+            tg.showAlert('Регистрация сброшена. Теперь вы можете зарегистрировать новую квартиру.');
             showPage('register');
         } catch (error) { tg.showAlert(`❌ Ошибка: ${error.message}`); }
     });
 }
+
 
 // --- Вспомогательные функции ---
 function setHeader(t, a) { document.getElementById('header-title').textContent = t; document.getElementById('header-address').textContent = a; }
