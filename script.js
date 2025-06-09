@@ -24,7 +24,11 @@ async function loadReadingsData() {
     showLoader();
     try {
         const response = await fetch(`${API_BASE_URL}/api/get-meters`, {
-            headers: { 'Authorization': `tma ${tg.initData}` }
+            // ИЗМЕНЕНИЕ ЗДЕСЬ
+            headers: { 
+                'Authorization': `tma ${tg.initData}`,
+                'ngrok-skip-browser-warning': 'true' // Добавляем этот заголовок
+            }
         });
         if (!response.ok) throw new Error(`Ошибка сервера: ${response.status}`);
         
@@ -34,6 +38,7 @@ async function loadReadingsData() {
         handleError(error.message);
     }
 }
+
 
 function renderReadingsPage(data) {
     const metersContainer = document.getElementById('meters-container');
@@ -139,7 +144,11 @@ async function loadProfileData() {
     showLoader();
     try {
         const response = await fetch(`${API_BASE_URL}/api/get-profile`, {
-            headers: { 'Authorization': `tma ${tg.initData}` }
+            // И ИЗМЕНЕНИЕ ЗДЕСЬ
+            headers: { 
+                'Authorization': `tma ${tg.initData}`,
+                'ngrok-skip-browser-warning': 'true'
+            }
         });
         if (!response.ok) throw new Error(`Ошибка сервера: ${response.status}`);
         
