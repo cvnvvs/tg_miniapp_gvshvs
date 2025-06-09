@@ -1,5 +1,5 @@
 // ВАЖНО: Вставьте сюда ваш актуальный HTTPS URL от ngrok
-const API_BASE_URL = 'https://bunny-brave-externally.ngrok-free.app'; 
+const API_BASE_URL = 'https://your-ngrok-https-url.ngrok-free.app'; 
 
 const tg = window.Telegram.WebApp;
 
@@ -55,6 +55,7 @@ function showPage(pageName) {
     }
 }
 
+// --- Регистрация ---
 function renderRegistrationStep1() {
     hideLoader();
     setHeader('Регистрация', 'Шаг 1: Выбор строения');
@@ -148,7 +149,6 @@ function renderReadingsPage() {
     hideLoader();
     const data = appState.userData;
     if (!data) { handleError("Не удалось загрузить данные пользователя."); return; }
-    
     const metersContainer = document.getElementById('readings-container');
     metersContainer.innerHTML = '<h3>Выберите счетчик для ввода показаний</h3>';
     setHeader('Передача показаний', `ул. Вахова, д. ${data.address.building}, кв. ${data.address.apartment}`);
@@ -180,18 +180,17 @@ function renderSingleReadingInput(meterId) {
         <p>Показания за прошлый месяц: <code>${lastReadingStr}</code></p>
         <p>Введите текущие показания:</p>
         <div class="readings-input-wrapper">
-            <input type="number" id="reading-part1" class="readings-input-part" maxlength="5" placeholder="00000" value="${currentInt}" inputmode="numeric" oninput="limitLength(this, 5)">
+            <input type="number" id="reading-part1" class="readings-input-part" maxlength="5" placeholder="00000" value="${currentInt}" inputmode="numeric" oninput="limitLength(this, 5); updateLiveInput();">
             <span class="readings-input-separator">,</span>
-            <input type="number" id="reading-part2" class="readings-input-part" maxlength="3" placeholder="000" value="${currentDec}" inputmode="numeric" oninput="limitLength(this, 3)">
+            <input type="number" id="reading-part2" class="readings-input-part" maxlength="3" placeholder="000" value="${currentDec}" inputmode="numeric" oninput="limitLength(this, 3); updateLiveInput();">
         </div>
         <div class="consumption-info" id="consumption-live"></div>
         <p id="anomaly-warning" class="hidden" style="color: #ff8800; font-weight: bold;"></p>
     </div>`;
     
-    const part1 = document.getElementById('reading-part1');
-    const part2 = document.getElementById('reading-part2');
-    
-    const updateLive = () => {
+    const updateLiveInput = () => {
+        const part1 = document.getElementById('reading-part1');
+        const part2 = document.getElementById('reading-part2');
         const p1 = part1.value;
         const p2 = part2.value;
         
@@ -204,7 +203,7 @@ function renderSingleReadingInput(meterId) {
             
             const avgConsumption = meter.average_consumption;
             const warning = document.getElementById('anomaly-warning');
-            if (Math.abs(consumption) > 500 || (avgConsumption && Math.abs(consumption) > avgConsumption * 5)) {
+            if (Math.abs(consumption) > 500 || (avgConsumption && Math.abs(consumption) > avgConsumption * 5 && avgConsumption > 0)) {
                 warning.textContent = 'ВНИМАНИЕ, СЛИШКОМ БОЛЬШАЯ РАЗНИЦА В ПОКАЗАНИЯХ!';
                 warning.classList.remove('hidden');
             } else {
@@ -217,9 +216,7 @@ function renderSingleReadingInput(meterId) {
             document.getElementById('anomaly-warning').classList.add('hidden');
         }
     };
-    part1.addEventListener('input', updateLive);
-    part2.addEventListener('input', updateLive);
-    updateLive();
+    updateLiveInput();
 }
 function limitLength(element, maxLength) {
     if (element.value.length > maxLength) element.value = element.value.slice(0, maxLength);
@@ -230,7 +227,7 @@ async function submitSingleReading(meter, value) {
     try {
         const payload = { readings: [{ meter_id: meter.id, value: value }] };
         const data = await apiFetch('/api/submit-readings', { method: 'POST', body: JSON.stringify(payload) });
-        appState.userData = data.user_data; // Обновляем данные пользователя
+        appState.userData = data.user_data;
         tg.showAlert('✅ Показания сохранены');
         showPage('readings');
     } catch(error) {
@@ -251,7 +248,7 @@ function renderProfilePage() {
     const emailText = data.user.email || 'не указан';
     const emailButtonText = data.user.email ? 'Изменить Email' : 'Добавить Email';
     let profileHTML = `<div class="profile-section">
-            <p><strong>Логин:</strong> ${data.user.login}</p>
+            <p><strong>Логин:</strong> ${data.user.login} (ID: ${data.user.user_id})</p>
             <p><strong>Email:</strong> ${emailText}</p>
             <p><strong>Лицевой счет:</strong> <code>${data.address.account_number}</code></p>
         </div><div class="history-section"><h3>📜 Информация по счетчикам</h3>`;
@@ -259,10 +256,14 @@ function renderProfilePage() {
         data.meters.forEach(meter => {
             const lastReadingStr = meter.last_reading !== null ? `${meter.last_reading.toFixed(3).replace('.', ',')}` : '-';
             const currentReadingStr = meter.current_reading !== null ? `<b>${meter.current_reading.toFixed(3).replace('.', ',')}</b>` : '-';
+            const consumption = meter.current_reading !== null ? `${(meter.current_reading - meter.last_reading).toFixed(3).replace('.', ',')} м³` : '-';
+
             profileHTML += `<div class="meter-card"><h4>${meter.meter_type === 'ГВС' ? '🔥' : '❄️'} ${meter.meter_type} (№ ${meter.factory_number})</h4>
                 <p><strong>Дата поверки:</strong> ${meter.checkup_date}</p>
-                <p><strong>Показания (прошлый месяц):</strong> <code>${lastReadingStr}</code></p>
-                <p><strong>Показания (текущий месяц):</strong> <code>${currentReadingStr}</code></p></div>`;
+                <p><strong>Показания (прошлый месяц) от ${meter.initial_reading_date}:</strong> <code>${lastReadingStr}</code></p>
+                <p><strong>Показания (текущий месяц):</strong> <code>${currentReadingStr}</code></p>
+                <p><strong>Расход за текущий период:</strong> <code>${consumption}</code></p>
+            </div>`;
         });
     } else { profileHTML += `<p>Счетчики не найдены.</p>`; }
     profileHTML += `</div>
@@ -281,13 +282,15 @@ async function submitModal() {
     const email = document.getElementById('modal-input').value.trim();
     if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { tg.showAlert('Неверный формат Email.'); return; }
     const newEmail = email || null;
+    document.getElementById('modal-content').innerHTML = '<div class="loader"></div>';
     try {
         await apiFetch('/api/update-email', { method: 'POST', body: JSON.stringify({ email: newEmail }) });
-        appState.userData.user.email = newEmail;
+        const updatedData = await apiFetch('/api/get-profile');
+        appState.userData = updatedData;
         tg.showAlert('Email успешно обновлен!');
         closeModal();
         renderProfilePage();
-    } catch (error) { tg.showAlert(`❌ Ошибка: ${error.message}`); }
+    } catch (error) { tg.showAlert(`❌ Ошибка: ${error.message}`); closeModal(); }
 }
 function handleResetClick() {
     tg.showConfirm("Вы уверены, что хотите сменить квартиру? Это действие необратимо.", async (ok) => {
