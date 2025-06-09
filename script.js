@@ -127,29 +127,73 @@ function submitAccount() {
 function renderEmailStep() {
     setHeader('Регистрация', 'Шаг 4 из 4: Контакты');
     const cont = document.getElementById('register-container');
-    cont.innerHTML = `<div class="form-step"><p>Email (необязательно):</p><input type="email" id="email-input" placeholder="user@example.com" inputmode="email"></div>`;
-    tg.MainButton.setText('Завершить регистрацию').offClick(submitAccount).onClick(finalSubmit);
+    
+    // Используем HTML для создания псевдо-кнопки
+    cont.innerHTML = `<div class="form-step">
+        <p>Email (необязательно):</p>
+        <input type="email" id="email-input" placeholder="user@example.com" inputmode="email">
+        <div class="button-grid" style="margin-top: 20px; grid-template-columns: 1fr;">
+            <button class="grid-button" onclick="handleEmailSubmission(true)">Пропустить этот шаг</button>
+        </div>
+    </div>`;
+    
+    // Главная кнопка теперь для подтверждения email
+    tg.MainButton.setText('Подтвердить Email и далее').offClick(submitAccount).onClick(() => handleEmailSubmission(false));
+    tg.MainButton.show();
 }
 
-async function finalSubmit() {
-    const email = document.getElementById('email-input').value;
-    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { tg.showAlert('Вы ввели некорректный Email.'); return; }
-    regData.email = email || null;
+// Новая функция для обработки шага с email
+function handleEmailSubmission(isSkipped) {
+    const emailInput = document.getElementById('email-input');
+    const email = emailInput.value.trim();
+
+    if (isSkipped) {
+        regData.email = null;
+        renderPolicyStep(); // Переходим к политике
+        return;
+    }
+
+    if (email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        regData.email = email;
+        renderPolicyStep(); // Переходим к политике
+    } else {
+        tg.showAlert('Вы ввели некорректный Email. Попробуйте снова или пропустите шаг.');
+    }
+}
+
+// Новая функция для шага с политикой
+function renderPolicyStep() {
+    setHeader('Регистрация', 'Финальный шаг: Согласие');
+    const cont = document.getElementById('register-container');
     
-    tg.showConfirm("Вы согласны с политикой обработки персональных данных?", async (ok) => {
-        if (!ok) { tg.showAlert('Регистрация отменена.'); return; }
-        tg.MainButton.showProgress().disable();
-        try {
-            await apiFetch('/api/register', { 
-                method: 'POST', 
-                body: JSON.stringify(regData) 
-                // private: true по умолчанию
-            });
-            tg.showAlert('✅ Регистрация успешно завершена!');
-            tg.close();
-        } catch (error) { tg.showAlert(`❌ Ошибка: ${error.message}`);
-        } finally { tg.MainButton.hideProgress().enable(); }
-    });
+    const policyText = "<b>Политика конфиденциальности (кратко):</b><br><br>" +
+                       "1. Мы храним ваш ID Telegram, адрес и введенные показания.<br>" +
+                       "2. Эти данные используются исключительно для передачи в УК и отображения вам.<br>" +
+                       "3. Мы не передаем ваши данные третьим лицам.<br><br>" +
+                       "Нажимая 'Согласен', вы подтверждаете свое согласие на обработку данных.";
+
+    cont.innerHTML = `<div class="form-step"><p style="text-align: left; font-size: 14px;">${policyText}</p></div>`;
+
+    // Теперь используем встроенное подтверждение Telegram, оно выглядит лучше
+    tg.MainButton.setText('✅ Согласен и завершить').offClick(handleEmailSubmission).onClick(finalSubmitWithPolicy);
+    tg.MainButton.show();
+}
+
+// Финальная функция отправки
+async function finalSubmitWithPolicy() {
+    tg.MainButton.showProgress().disable();
+    try {
+        await apiFetch('/api/register', { 
+            method: 'POST', 
+            body: JSON.stringify(regData) 
+        });
+        tg.showAlert('✅ Регистрация успешно завершена!');
+        tg.close();
+    } catch (error) { 
+        tg.showAlert(`❌ Ошибка: ${error.message}`);
+    } finally { 
+        tg.MainButton.hideProgress().enable(); 
+    }
 }
 
 
