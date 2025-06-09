@@ -18,9 +18,7 @@ async function apiFetch(endpoint, options = {}) {
         if (response.ok) return response.status === 204 ? null : response.json();
         const errorData = await response.json();
         throw new Error(errorData.detail || 'Ошибка сервера.');
-    } catch (e) {
-        throw new Error(e.message || 'Ошибка сети.');
-    }
+    } catch (e) { throw new Error(e.message || 'Ошибка сети.'); }
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -51,7 +49,6 @@ function showPage(pageName) {
         document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
         const targetTab = document.querySelector(`.tab-button[onclick*="'${pageName}'"]`);
         if (targetTab) targetTab.classList.add('active');
-        
         if (pageName === 'readings') renderReadingsPage();
         else renderProfilePage();
     } else {
@@ -141,8 +138,9 @@ async function finalSubmit() {
     try {
         const data = await apiFetch('/api/register', { method: 'POST', body: JSON.stringify(appState.regData) });
         appState.userData = data.user_data;
+        tg.HapticFeedback.notificationOccurred('success');
         tg.showAlert('✅ Регистрация успешно завершена!');
-        showPage('profile');
+        showPage('profile'); // Показываем профиль после регистрации
     } catch (error) { 
         tg.showAlert(`❌ Ошибка: ${error.message}`);
         showPage('register');
@@ -240,7 +238,7 @@ async function submitSingleReading(meter, value) {
         // ИСПРАВЛЕНИЕ: Обновляем локальное состояние и перерисовываем страницу
         appState.userData = data.user_data;
         tg.HapticFeedback.notificationOccurred('success');
-        showPage('readings');
+        showPage('readings'); // Возвращаемся к списку счетчиков
     } catch(error) {
         tg.showAlert(`❌ Ошибка: ${error.message}`);
         tg.MainButton.hideProgress().enable();
@@ -294,9 +292,10 @@ async function submitModal() {
     document.getElementById('modal-content').innerHTML = '<div class="loader"></div>';
     try {
         await apiFetch('/api/update-email', { method: 'POST', body: JSON.stringify({ email: newEmail }) });
+        // ИСПРАВЛЕНИЕ: Обновляем локальное состояние и перерисовываем страницу
         const updatedData = await apiFetch('/api/get-profile');
         appState.userData = updatedData;
-        tg.showAlert('Email успешно обновлен!');
+        tg.HapticFeedback.notificationOccurred('success');
         closeModal();
         renderProfilePage();
     } catch (error) { tg.showAlert(`❌ Ошибка: ${error.message}`); closeModal(); }
@@ -308,6 +307,7 @@ function handleResetClick() {
         try {
             await apiFetch('/api/reset-registration', { method: 'POST' });
             appState.userData = null;
+            tg.HapticFeedback.notificationOccurred('success');
             tg.showAlert('Регистрация сброшена.');
             showPage('register');
         } catch (error) { tg.showAlert(`❌ Ошибка: ${error.message}`); }
