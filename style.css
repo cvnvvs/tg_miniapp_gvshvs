@@ -69,7 +69,9 @@ body {
 .tab-button.active { color: var(--tg-theme-link-color); }
 .tab-button span { font-size: 24px; }
 .tab-button p { font-size: 12px; margin: 0; }
-.hidden { display: none !important; }
+.hidden {
+    display: none !important;
+}
 .readings-input-wrapper {
     display: flex;
     align-items: center;
