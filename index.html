@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>Приложение для показаний</title>
     <link rel="stylesheet" href="style.css">
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
@@ -10,15 +10,14 @@
 <body>
     <div class="container">
         <div id="header" class="header">
-            <h1 id="header-title">Загрузка данных...</h1>
+            <h1 id="header-title">Загрузка...</h1>
             <p id="header-address"></p>
         </div>
 
-        <div id="loader-container" class="active">
+        <div id="loader-container" class="page active">
             <div class="loader"></div>
         </div>
 
-        <!-- Контейнеры для разных страниц -->
         <div id="readings-container" class="page"></div>
         <div id="profile-container" class="page"></div>
         <div id="register-container" class="page"></div>

@@ -1,164 +1,110 @@
+// ВАЖНО: Перед запуском ngrok, вставьте сюда его АКТУАЛЬНЫЙ HTTPS URL
 const API_BASE_URL = 'https://bunny-brave-externally.ngrok-free.app'; 
+
 const tg = window.Telegram.WebApp;
 
-// --- ОБРАБОТЧИКИ СОБЫТИЙ И ЗАГРУЗКА ---
+// --- Улучшенный обработчик ошибок API ---
+async function handleApiResponse(response) {
+    if (response.ok) {
+        // Если ответ 204 No Content, возвращаем null, а не пытаемся парсить JSON
+        if (response.status === 204) return null;
+        return response.json();
+    }
+    try {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Произошла неизвестная ошибка сервера.');
+    } catch (e) {
+        throw new Error(`Ошибка сервера: ${response.status} ${response.statusText}`);
+    }
+}
+
+// --- Маршрутизация и запуск ---
 document.addEventListener('DOMContentLoaded', () => {
     tg.ready();
     tg.expand();
-    
-    const startParam = tg.initDataUnsafe.start_param;
+    const startParam = tg.initDataUnsafe.start_param || '';
     route(startParam);
-
-    // Скрываем основную кнопку по умолчанию
     tg.MainButton.hide();
 });
 
 function route(param) {
-    // Убираем все активные страницы
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-
-    if (param === 'profile') {
-        loadProfileData();
-    } else if (param === 'register') {
-        loadRegistrationPage();
-    } else {
-        loadReadingsData();
-    }
+    showLoader();
+    if (param === 'profile') loadProfileData();
+    else if (param === 'register') loadRegistrationPage();
+    else loadReadingsData();
 }
 
-// --- РЕГИСТРАЦИЯ ---
-let registrationData = {};
-
+// --- Регистрация ---
+let regData = {};
 function loadRegistrationPage() {
     hideLoader();
     setHeader('Регистрация', 'Шаг 1 из 4');
     const container = document.getElementById('register-container');
     container.classList.add('active');
-    container.innerHTML = `
-        <div class="form-step">
-            <p>Выберите ваше строение (корпус):</p>
-            <div class="button-grid">
-                <button class="grid-button" onclick="handleBuildingSelect('8В')">8В</button>
-                <button class="grid-button" onclick="handleBuildingSelect('8Г')">8Г</button>
-                <button class="grid-button" onclick="handleBuildingSelect('8Д')">8Д</button>
-            </div>
-        </div>
-    `;
+    container.innerHTML = `<div class="form-step"><p>Выберите ваше строение:</p><div class="button-grid">
+        <button class="grid-button" onclick="selectBuilding('8В')">8В</button>
+        <button class="grid-button" onclick="selectBuilding('8Г')">8Г</button>
+        <button class="grid-button" onclick="selectBuilding('8Д')">8Д</button></div></div>`;
 }
-
-function handleBuildingSelect(building) {
-    registrationData.building = building;
+function selectBuilding(building) {
+    regData.building = building;
     setHeader('Регистрация', `Шаг 2 из 4: Строение ${building}`);
-    const container = document.getElementById('register-container');
-    container.innerHTML = `
-        <div class="form-step">
-            <p>Теперь введите номер вашей квартиры:</p>
-            <input type="number" id="apartment-input" placeholder="Например: 45">
-        </div>
-    `;
-    tg.MainButton.setText('Далее').show();
-    tg.MainButton.onClick(handleApartmentSubmit);
+    const cont = document.getElementById('register-container');
+    cont.innerHTML = `<div class="form-step"><p>Теперь введите номер квартиры:</p><input type="number" id="apartment-input" placeholder="Например: 45" inputmode="numeric"></div>`;
+    tg.MainButton.setText('Далее').show().onClick(submitApartment);
 }
-
-async function handleApartmentSubmit() {
+async function submitApartment() {
     const apartment = document.getElementById('apartment-input').value;
-    if (!apartment || !/^\d+$/.test(apartment)) {
-        tg.showAlert('Пожалуйста, введите корректный номер квартиры.');
-        return;
-    }
-    registrationData.apartment = apartment;
-    tg.MainButton.showProgress();
-
+    if (!apartment || !/^\d+$/.test(apartment)) { tg.showAlert('Введите корректный номер квартиры.'); return; }
+    regData.apartment = apartment;
+    tg.MainButton.showProgress().disable();
     try {
-        const response = await fetch(`${API_BASE_URL}/api/check-address`, {
-            method: 'POST', headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ building: registrationData.building, apartment: registrationData.apartment })
-        });
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.detail);
-        }
-        await response.json(); // Адрес найден
+        const response = await fetch(`${API_BASE_URL}/api/check-address`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(regData) });
+        await handleApiResponse(response);
         renderAccountStep();
-    } catch (error) {
-        tg.showAlert(error.message);
-    } finally {
-        tg.MainButton.hideProgress();
-    }
+    } catch (error) { tg.showAlert(error.message);
+    } finally { tg.MainButton.hideProgress().enable(); }
 }
-
 function renderAccountStep() {
     setHeader('Регистрация', 'Шаг 3 из 4: Верификация');
-    const container = document.getElementById('register-container');
-    container.innerHTML = `
-        <div class="form-step">
-            <p>Адрес найден! Для подтверждения введите ваш <b>6-значный лицевой счет</b>.</p>
-            <input type="number" id="account-input" placeholder="000000" maxlength="6">
-        </div>
-    `;
-    tg.MainButton.setText('Далее').show();
-    tg.MainButton.offClick(handleApartmentSubmit);
-    tg.MainButton.onClick(handleAccountSubmit);
+    const cont = document.getElementById('register-container');
+    cont.innerHTML = `<div class="form-step"><p>Адрес найден! Введите ваш <b>6-значный лицевой счет</b>.</p><input type="number" id="account-input" placeholder="000000" maxlength="6" inputmode="numeric"></div>`;
+    tg.MainButton.offClick(submitApartment).onClick(submitAccount);
 }
-
-function handleAccountSubmit() {
+function submitAccount() {
     const account = document.getElementById('account-input').value;
-    if (!account || !/^\d{6}$/.test(account)) {
-        tg.showAlert('Лицевой счет должен состоять ровно из 6 цифр.');
-        return;
-    }
-    registrationData.account = account;
+    if (!account || !/^\d{6}$/.test(account)) { tg.showAlert('Лицевой счет должен состоять из 6 цифр.'); return; }
+    regData.account = account;
     renderEmailStep();
 }
-
 function renderEmailStep() {
     setHeader('Регистрация', 'Шаг 4 из 4: Контакты');
-    const container = document.getElementById('register-container');
-    container.innerHTML = `
-        <div class="form-step">
-            <p>Почти готово! Введите ваш Email (необязательно) или оставьте поле пустым.</p>
-            <input type="email" id="email-input" placeholder="user@example.com">
-        </div>
-    `;
-    tg.MainButton.setText('Завершить регистрацию').show();
-    tg.MainButton.offClick(handleAccountSubmit);
-    tg.MainButton.onClick(handleFinalSubmit);
+    const cont = document.getElementById('register-container');
+    cont.innerHTML = `<div class="form-step"><p>Email (необязательно):</p><input type="email" id="email-input" placeholder="user@example.com" inputmode="email"></div>`;
+    tg.MainButton.setText('Завершить регистрацию').offClick(submitAccount).onClick(finalSubmit);
 }
-
-async function handleFinalSubmit() {
+async function finalSubmit() {
     const email = document.getElementById('email-input').value;
-    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-        tg.showAlert('Вы ввели некорректный Email.');
-        return;
-    }
-    registrationData.email = email || null;
-    
-    // Показываем политику для финального согласия
-    tg.showConfirm("Вы согласны с политикой обработки персональных данных?", async (isConfirmed) => {
-        if (isConfirmed) {
-            tg.MainButton.showProgress();
-            try {
-                const response = await fetch(`${API_BASE_URL}/api/register`, {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json', 'Authorization': `tma ${tg.initData}`},
-                    body: JSON.stringify(registrationData)
-                });
-                if (!response.ok) { const err = await response.json(); throw new Error(err.detail); }
-                tg.showAlert('✅ Регистрация успешно завершена!');
-                tg.close();
-            } catch (error) {
-                tg.showAlert(`❌ Ошибка: ${error.message}`);
-            } finally {
-                tg.MainButton.hideProgress();
-            }
-        } else {
-            tg.showAlert('Регистрация отменена. Вы можете начать заново, перезапустив приложение.');
-        }
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { tg.showAlert('Вы ввели некорректный Email.'); return; }
+    regData.email = email || null;
+    tg.showConfirm("Вы согласны с политикой обработки персональных данных?", async (ok) => {
+        if (!ok) { tg.showAlert('Регистрация отменена.'); return; }
+        tg.MainButton.showProgress().disable();
+        try {
+            const response = await fetch(`${API_BASE_URL}/api/register`, { method: 'POST', headers: {'Content-Type': 'application/json', 'Authorization': `tma ${tg.initData}`}, body: JSON.stringify(regData) });
+            await handleApiResponse(response);
+            tg.showAlert('✅ Регистрация успешно завершена!');
+            tg.close();
+        } catch (error) { tg.showAlert(`❌ Ошибка: ${error.message}`);
+        } finally { tg.MainButton.hideProgress().enable(); }
     });
 }
-
-// --- ЛОГИКА ДЛЯ ПЕРЕДАЧИ ПОКАЗАНИЙ ---
-
+// --- Функции для показаний и профиля (вспомогательные) ---
+function setHeader(t, a) { document.getElementById('header-title').textContent = t; document.getElementById('header-address').textContent = a; }
+function showLoader() { document.getElementById('loader-container').classList.add('active'); }
+function hideLoader() { document.getElementById('loader-container').classList.remove('active'); }
+function handleError(m) { hideLoader(); const c = document.getElementById('error-container'); c.classList.add('active'); c.innerHTML = `<p style="text-align: center; color: red;">${m}</p>`; tg.MainButton.hide(); }
 async function loadReadingsData() {
     setHeader('Передача показаний', 'Загрузка...');
     showLoader();
@@ -332,11 +278,3 @@ function renderProfilePage(data) {
     // Кнопка в профиле не нужна, т.к. Mini App просто показывает информацию
     tg.MainButton.hide();
 }
-
-
-// --- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ---
-
-function setHeader(title, address) { document.getElementById('header-title').textContent = title; document.getElementById('header-address').textContent = address; }
-function showLoader() { document.getElementById('loader-container').classList.add('active'); }
-function hideLoader() { document.getElementById('loader-container').classList.remove('active'); }
-function handleError(message) { hideLoader(); const container = document.getElementById('error-container'); container.classList.add('active'); container.innerHTML = `<p style="text-align: center; color: red;">${message}</p>`; tg.MainButton.hide();}
