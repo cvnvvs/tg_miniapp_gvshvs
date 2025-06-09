@@ -69,6 +69,14 @@ let regData = {};
 function loadRegistrationPage() {
     hideLoader();
     setHeader('Регистрация', 'Шаг 1 из 4');
+    
+    // --- ИСПРАВЛЕНИЕ ---
+    // Сначала очищаем контейнер ошибок, где была кнопка
+    const errorContainer = document.getElementById('error-container');
+    errorContainer.classList.remove('active');
+    errorContainer.innerHTML = '';
+    // --- КОНЕЦ ИСПРАВЛЕНИЯ ---
+
     const container = document.getElementById('register-container');
     container.classList.add('active');
     container.innerHTML = `<div class="form-step"><p>Выберите ваше строение:</p><div class="button-grid">
