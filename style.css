@@ -49,3 +49,50 @@ body {
     font-weight: 600; /* Делаем текст жирнее */
     cursor: pointer;
 }
+body {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    box-sizing: border-box;
+}
+#app-container {
+    flex-grow: 1;
+    overflow-y: auto; /* Позволяет контенту скроллиться */
+    padding: 15px;
+}
+.content {
+    /* Контейнер для страниц */
+}
+
+/* Стили для нижнего меню (табов) */
+.tab-bar {
+    display: flex;
+    justify-content: space-around;
+    background-color: var(--tg-theme-secondary-bg-color);
+    border-top: 1px solid var(--tg-theme-bg-color);
+    padding: 5px 0;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    box-shadow: 0 -2px 5px rgba(0,0,0,0.05);
+}
+.tab-button {
+    background: none;
+    border: none;
+    color: var(--tg-theme-hint-color);
+    padding: 5px;
+    cursor: pointer;
+    text-align: center;
+    flex-grow: 1;
+}
+.tab-button.active {
+    color: var(--tg-theme-link-color);
+}
+.tab-button span {
+    font-size: 24px;
+}
+.tab-button p {
+    font-size: 12px;
+    margin: 0;
+}
