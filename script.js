@@ -1,19 +1,40 @@
-const API_BASE_URL = 'https://bunny-brave-externally.ngrok-free.app'; 
+// ВАЖНО: Перед запуском ngrok, вставьте сюда его АКТУАЛЬНЫЙ HTTPS URL
+const API_BASE_URL = 'https://your-ngrok-url.ngrok-free.app'; 
 
 const tg = window.Telegram.WebApp;
 
-// --- Улучшенный обработчик ошибок API ---
-async function handleApiResponse(response) {
+// --- Централизованная функция для выполнения запросов к API ---
+async function apiFetch(endpoint, options = {}) {
+    // Устанавливаем заголовки по умолчанию
+    const headers = {
+        'Content-Type': 'application/json',
+        'Authorization': `tma ${tg.initData}`,
+        'ngrok-skip-browser-warning': 'true' // Говорим ngrok не показывать страницу-предупреждение
+    };
+
+    // Объединяем заголовки по умолчанию с теми, что могли быть переданы
+    const config = {
+        ...options,
+        headers: {
+            ...headers,
+            ...options.headers,
+        },
+    };
+
+    const response = await fetch(`${API_BASE_URL}${endpoint}`, config);
+    
+    // Улучшенная обработка ответа
     if (response.ok) {
-        // Если ответ 204 No Content, возвращаем null, а не пытаемся парсить JSON
-        if (response.status === 204) return null;
+        if (response.status === 204) return null; // No Content
         return response.json();
-    }
-    try {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || 'Произошла неизвестная ошибка сервера.');
-    } catch (e) {
-        throw new Error(`Ошибка сервера: ${response.status} ${response.statusText}`);
+    } else {
+        try {
+            const errorData = await response.json();
+            throw new Error(errorData.detail || 'Произошла неизвестная ошибка сервера.');
+        } catch (e) {
+            // Если ответ - не JSON (например, HTML от ngrok), показываем статус
+            throw new Error(`Ошибка сети или сервера: ${response.status} ${response.statusText}`);
+        }
     }
 }
 
@@ -59,8 +80,10 @@ async function submitApartment() {
     regData.apartment = apartment;
     tg.MainButton.showProgress().disable();
     try {
-        const response = await fetch(`${API_BASE_URL}/api/check-address`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(regData) });
-        await handleApiResponse(response);
+        await apiFetch('/api/check-address', { 
+            method: 'POST', 
+            body: JSON.stringify(regData) 
+        });
         renderAccountStep();
     } catch (error) { tg.showAlert(error.message);
     } finally { tg.MainButton.hideProgress().enable(); }
@@ -91,46 +114,37 @@ async function finalSubmit() {
         if (!ok) { tg.showAlert('Регистрация отменена.'); return; }
         tg.MainButton.showProgress().disable();
         try {
-            const response = await fetch(`${API_BASE_URL}/api/register`, { method: 'POST', headers: {'Content-Type': 'application/json', 'Authorization': `tma ${tg.initData}`}, body: JSON.stringify(regData) });
-            await handleApiResponse(response);
+            await apiFetch('/api/register', { 
+                method: 'POST', 
+                body: JSON.stringify(regData) 
+            });
             tg.showAlert('✅ Регистрация успешно завершена!');
             tg.close();
         } catch (error) { tg.showAlert(`❌ Ошибка: ${error.message}`);
         } finally { tg.MainButton.hideProgress().enable(); }
     });
 }
-// --- Функции для показаний и профиля (вспомогательные) ---
-function setHeader(t, a) { document.getElementById('header-title').textContent = t; document.getElementById('header-address').textContent = a; }
-function showLoader() { document.getElementById('loader-container').classList.add('active'); }
-function hideLoader() { document.getElementById('loader-container').classList.remove('active'); }
-function handleError(m) { hideLoader(); const c = document.getElementById('error-container'); c.classList.add('active'); c.innerHTML = `<p style="text-align: center; color: red;">${m}</p>`; tg.MainButton.hide(); }
+
+// --- Передача показаний ---
 async function loadReadingsData() {
     setHeader('Передача показаний', 'Загрузка...');
-    showLoader();
     try {
-        const response = await fetch(`${API_BASE_URL}/api/get-meters`, {
-            headers: { 'Authorization': `tma ${tg.initData}` }
-        });
-        if (!response.ok) throw new Error(`Ошибка сервера: ${response.status}`);
-        
-        const data = await response.json();
+        const data = await apiFetch('/api/get-meters');
+        hideLoader();
         renderReadingsPage(data);
     } catch (error) {
         handleError(error.message);
     }
 }
-
 function renderReadingsPage(data) {
-    const metersContainer = document.getElementById('meters-container');
-    metersContainer.innerHTML = ''; // Очищаем лоадер
-
+    const metersContainer = document.getElementById('readings-container');
+    metersContainer.innerHTML = '';
+    metersContainer.classList.add('active');
     setHeader('Передача показаний', `ул. Вахова, д. ${data.address.building}, кв. ${data.address.apartment}`);
-
     if (data.meters.length === 0) {
         metersContainer.innerHTML = '<p>Для вашей квартиры не найдено счетчиков.</p>';
         return;
     }
-
     data.meters.forEach(meter => {
         const card = document.createElement('div');
         card.className = 'meter-card';
@@ -141,11 +155,8 @@ function renderReadingsPage(data) {
                 <label for="meter_${meter.id}">Текущие показания (прошлые: ${meter.last_reading.toFixed(3).replace('.', ',')})</label>
                 <input type="text" id="meter_${meter.id}" inputmode="decimal" placeholder="12345,123">
                 <div class="consumption-info" id="consumption_${meter.id}"></div>
-            </div>
-        `;
+            </div>`;
         metersContainer.appendChild(card);
-
-        // Добавляем обработчик для подсчета расхода "на лету"
         const input = card.querySelector(`#meter_${meter.id}`);
         input.addEventListener('input', () => {
             const consumptionDiv = card.querySelector(`#consumption_${meter.id}`);
@@ -153,127 +164,79 @@ function renderReadingsPage(data) {
             if (!isNaN(currentValue)) {
                 const consumption = currentValue - meter.last_reading;
                 consumptionDiv.textContent = `Расход: ${consumption.toFixed(3).replace('.', ',')} м³`;
-            } else {
-                consumptionDiv.textContent = '';
-            }
+            } else { consumptionDiv.textContent = ''; }
         });
     });
-
-    // Настраиваем главную кнопку Telegram
-    tg.MainButton.setText('Отправить показания');
-    tg.MainButton.show();
-    tg.onEvent('mainButtonClicked', submitReadings);
+    tg.MainButton.setText('Отправить показания').show().onClick(submitReadings);
 }
-
 async function submitReadings() {
     const payload = { readings: [] };
-    const inputs = document.querySelectorAll('input[type="text"]');
+    const inputs = document.querySelectorAll('#readings-container input[type="text"]');
     let hasErrors = false;
-
     inputs.forEach(input => {
         const meterId = parseInt(input.id.split('_')[1]);
         const valueStr = input.value.replace(',', '.').trim();
-        
-        // Простая валидация на фронте
-        if (valueStr === '') return; // Пропускаем пустые поля
-
-        const value = parseFloat(valueStr);
-        if (isNaN(value) || !/^\d{1,5}\.\d{3}$/.test(valueStr)) {
-            tg.showAlert(`Неверный формат показаний для счетчика с ID ${meterId}. Пример: 12345,123`);
-            hasErrors = true;
-            return;
+        if (valueStr === '') return;
+        if (!/^\d{1,5}\.\d{3}$/.test(valueStr)) {
+            tg.showAlert(`Неверный формат показаний для счетчика №${meterId}. Пример: 123,456`);
+            hasErrors = true; return;
         }
-        payload.readings.push({ meter_id: meterId, value: value });
+        payload.readings.push({ meter_id: meterId, value: parseFloat(valueStr) });
     });
-
     if (hasErrors || payload.readings.length === 0) {
-        if (!hasErrors) tg.showAlert('Вы не ввели ни одного показания.');
-        return;
+        if (!hasErrors) tg.showAlert('Вы не ввели ни одного показания.'); return;
     }
-
-    tg.MainButton.showProgress();
-    tg.MainButton.disable();
-
+    tg.MainButton.showProgress().disable();
     try {
-        const response = await fetch(`${API_BASE_URL}/api/submit-readings`, {
+        await apiFetch('/api/submit-readings', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `tma ${tg.initData}`
-            },
             body: JSON.stringify(payload)
         });
-
-        if (!response.ok) throw new Error('Ошибка при отправке данных на сервер.');
-
         tg.showAlert('✅ Показания успешно отправлены!');
         tg.close();
-    } catch (error) {
-        tg.showAlert(`❌ ${error.message}`);
-    } finally {
-        tg.MainButton.hideProgress();
-        tg.MainButton.enable();
-    }
+    } catch (error) { tg.showAlert(`❌ ${error.message}`);
+    } finally { tg.MainButton.hideProgress().enable(); }
 }
 
-
-// --- ЛОГИКА ДЛЯ ПРОФИЛЯ ---
-
+// --- Профиль и История ---
 async function loadProfileData() {
     setHeader('Профиль', 'Загрузка...');
-    showLoader();
     try {
-        const response = await fetch(`${API_BASE_URL}/api/get-profile`, {
-            headers: { 'Authorization': `tma ${tg.initData}` }
-        });
-        if (!response.ok) throw new Error(`Ошибка сервера: ${response.status}`);
-        
-        const data = await response.json();
+        const data = await apiFetch('/api/get-profile');
+        hideLoader();
         renderProfilePage(data);
     } catch (error) {
         handleError(error.message);
     }
 }
-
 function renderProfilePage(data) {
-    document.getElementById('meters-container').innerHTML = ''; // Скрываем лоадер/формы
     const profileContainer = document.getElementById('profile-container');
-    profileContainer.classList.remove('hidden');
-
+    profileContainer.classList.add('active');
     setHeader('Профиль', `ул. Вахова, д. ${data.address.building}, кв. ${data.address.apartment}`);
-
-    let profileHTML = `
-        <div class="profile-section">
+    let profileHTML = `<div class="profile-section">
             <p><strong>Логин:</strong> ${data.user.login}</p>
             <p><strong>Email:</strong> ${data.user.email || 'не указан'}</p>
             <p><strong>Лицевой счет:</strong> <code>${data.address.account_number}</code></p>
-        </div>
-    `;
-
+        </div>`;
     profileHTML += `<div class="history-section"><h3>📜 История показаний</h3>`;
     if (data.meters.length > 0) {
         data.meters.forEach(meter => {
             profileHTML += `<h4>${meter.meter_type === 'ГВС' ? '🔥' : '❄️'} ${meter.meter_type} (№ ${meter.factory_number})</h4>`;
             if (meter.history.length > 0) {
                 meter.history.forEach(rec => {
-                    profileHTML += `
-                        <div class="history-item">
-                            <strong>Период: ${rec.period}</strong><br>
-                            Показание: ${rec.curr_reading.toFixed(3).replace('.',',')} (Расход: ${rec.consumption.toFixed(3).replace('.',',')} м³)
-                        </div>
-                    `;
+                    profileHTML += `<div class="history-item"><strong>Период: ${rec.period}</strong><br>
+                        Показание: ${rec.curr_reading.toFixed(3).replace('.',',')} (Расход: ${rec.consumption.toFixed(3).replace('.',',')} м³)</div>`;
                 });
-            } else {
-                profileHTML += `<div class="history-item">Нет истории.</div>`;
-            }
+            } else { profileHTML += `<div class="history-item">Нет истории.</div>`; }
         });
-    } else {
-        profileHTML += `<p>Счетчики не найдены.</p>`;
-    }
+    } else { profileHTML += `<p>Счетчики не найдены.</p>`; }
     profileHTML += `</div>`;
-    
     profileContainer.innerHTML = profileHTML;
-
-    // Кнопка в профиле не нужна, т.к. Mini App просто показывает информацию
     tg.MainButton.hide();
 }
+
+// --- Вспомогательные функции ---
+function setHeader(t, a) { document.getElementById('header-title').textContent = t; document.getElementById('header-address').textContent = a; }
+function showLoader() { document.querySelectorAll('.page').forEach(p => p.classList.remove('active')); document.getElementById('loader-container').classList.add('active'); }
+function hideLoader() { document.getElementById('loader-container').classList.remove('active'); }
+function handleError(m) { hideLoader(); const c = document.getElementById('error-container'); c.classList.add('active'); c.innerHTML = `<p style="text-align: center; color: red;">${m}</p>`; tg.MainButton.hide(); }
