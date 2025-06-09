@@ -1,31 +1,38 @@
 // ВАЖНО: Перед запуском ngrok, вставьте сюда его АКТУАЛЬНЫЙ HTTPS URL
 const API_BASE_URL = 'https://bunny-brave-externally.ngrok-free.app'; 
-
 const tg = window.Telegram.WebApp;
+
+// --- Глобальное состояние приложения ---
+let appState = {
+    userData: null, // Здесь будут храниться данные о пользователе после логина
+};
 
 // --- Централизованная функция для выполнения запросов к API ---
 async function apiFetch(endpoint, options = {}) {
-    const isPrivate = options.private !== false; // Все эндпоинты приватные по умолчанию
-    const headers = { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true'};
+    const isPrivate = options.private !== false;
+    const headers = {
+        'Content-Type': 'application/json',
+        'ngrok-skip-browser-warning': 'true' 
+    };
 
     if (isPrivate) {
-        // Для приватных эндпоинтов добавляем заголовок авторизации
         if (!tg.initData) throw new Error("Не удалось получить данные для авторизации (initData).");
         headers['Authorization'] = `tma ${tg.initData}`;
     }
 
     const config = { ...options, headers: { ...headers, ...options.headers } };
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, config);
     
-    if (response.ok) {
-        return response.status === 204 ? null : response.json();
-    } else {
-        try {
+    try {
+        const response = await fetch(`${API_BASE_URL}${endpoint}`, config);
+        if (response.ok) {
+            return response.status === 204 ? null : response.json();
+        } else {
             const errorData = await response.json();
             throw new Error(errorData.detail || 'Произошла неизвестная ошибка сервера.');
-        } catch (e) {
-            throw new Error(`Ошибка сети или сервера: ${response.status} ${response.statusText}`);
         }
+    } catch (e) {
+        // Обрабатываем ошибки сети или некорректного JSON
+        throw new Error(e.message || 'Ошибка сети. Проверьте подключение.');
     }
 }
 
@@ -34,190 +41,130 @@ document.addEventListener('DOMContentLoaded', () => {
     tg.ready();
     tg.expand();
     tg.MainButton.hide();
-    const startParam = tg.initDataUnsafe.start_param || '';
+    document.body.style.visibility = 'visible';
     
-    document.body.style.visibility = 'visible'; // Показываем контент после настройки
-    
-    if (startParam === 'register') {
-        loadRegistrationPage();
-    } else {
-        // Проверяем, зарегистрирован ли пользователь
-        apiFetch('/api/get-meters').then(data => {
-            renderReadingsPage(data);
-        }).catch(error => {
-            if (error.message.includes('403')) {
-                // Если 403, значит пользователь не зарегистрирован или неактивен
-                routeToRegistration();
-            } else {
-                handleError(error.message);
-            }
+    showLoader();
+    apiFetch('/api/get-profile')
+        .then(data => {
+            appState.userData = data;
+            showPage('readings');
+        })
+        .catch(() => {
+            showPage('register');
         });
-    }
 });
 
-function routeToRegistration() {
-    hideLoader();
-    setHeader('Необходимо зарегистрироваться', 'Это нужно сделать только один раз');
-    const container = document.getElementById('error-container');
-    container.classList.add('active');
-    container.innerHTML = `<div class="form-step">
-        <p>Ваша регистрация не найдена или неактивна. Пожалуйста, пройдите верификацию.</p>
-        <div class="button-grid" style="grid-template-columns: 1fr;">
-            <button class="full-width-button" onclick="loadRegistrationPage()">Пройти верификацию</button>
-        </div>
-    </div>`;
+// --- Навигация ---
+function showPage(pageName) {
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    const container = document.getElementById(`${pageName}-container`);
+    if (container) container.classList.add('active');
+    
+    tg.MainButton.hide();
+
+    const tabBar = document.getElementById('tab-bar');
+    if (pageName === 'readings' || pageName === 'profile') {
+        tabBar.classList.remove('hidden');
+        document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
+        if (pageName === 'readings') {
+            document.querySelector('.tab-button[onclick*="readings"]').classList.add('active');
+            renderReadingsPage();
+        } else if (pageName === 'profile') {
+            document.querySelector('.tab-button[onclick*="profile"]').classList.add('active');
+            renderProfilePage();
+        }
+    } else {
+        tabBar.classList.add('hidden');
+        if (pageName === 'register') renderRegistrationStep1();
+    }
 }
 
 // --- Регистрация ---
 let regData = {};
-function loadRegistrationPage() {
+function renderRegistrationStep1() {
     hideLoader();
-    setHeader('Регистрация', 'Шаг 1 из 4');
-    
-    // --- ИСПРАВЛЕНИЕ ---
-    // Сначала очищаем контейнер ошибок, где была кнопка
-    const errorContainer = document.getElementById('error-container');
-    errorContainer.classList.remove('active');
-    errorContainer.innerHTML = '';
-    // --- КОНЕЦ ИСПРАВЛЕНИЯ ---
-
+    setHeader('Регистрация', 'Шаг 1: Выбор строения');
     const container = document.getElementById('register-container');
-    container.classList.add('active');
     container.innerHTML = `<div class="form-step"><p>Выберите ваше строение:</p><div class="button-grid">
-        <button class="grid-button" onclick="selectBuilding('8В')">8В</button>
-        <button class="grid-button" onclick="selectBuilding('8Г')">8Г</button>
-        <button class="grid-button" onclick="selectBuilding('8Д')">8Д</button></div></div>`;
-    tg.MainButton.hide();
+        <button class="grid-button" onclick="handleBuildingSelect('8В')">8В</button>
+        <button class="grid-button" onclick="handleBuildingSelect('8Г')">8Г</button>
+        <button class="grid-button" onclick="handleBuildingSelect('8Д')">8Д</button></div></div>`;
 }
-
-function selectBuilding(building) {
+function handleBuildingSelect(building) {
     regData.building = building;
-    setHeader('Регистрация', `Шаг 2 из 4: Строение ${building}`);
+    setHeader('Регистрация', `Шаг 2: Номер квартиры`);
     const cont = document.getElementById('register-container');
-    cont.innerHTML = `<div class="form-step"><p>Теперь введите номер квартиры:</p><input type="number" id="apartment-input" placeholder="Например: 45" inputmode="numeric"></div>`;
-    tg.MainButton.setText('Далее').show().onClick(submitApartment);
+    cont.innerHTML = `<div class="form-step"><p>Строение <b>${building}</b>. Теперь введите номер квартиры:</p><input type="number" id="apartment-input" placeholder="Например: 45" inputmode="numeric"></div>`;
+    tg.MainButton.setText('Далее').show().onClick(handleApartmentSubmit);
 }
-
-async function submitApartment() {
+async function handleApartmentSubmit() {
     const apartment = document.getElementById('apartment-input').value;
     if (!apartment || !/^\d+$/.test(apartment)) { tg.showAlert('Введите корректный номер квартиры.'); return; }
     regData.apartment = apartment;
     tg.MainButton.showProgress().disable();
     try {
-        await apiFetch('/api/check-address', { 
-            method: 'POST', 
-            body: JSON.stringify(regData),
-            private: false // Это публичный эндпоинт
-        });
+        await apiFetch('/api/check-address', { method: 'POST', body: JSON.stringify(regData), private: false });
         renderAccountStep();
     } catch (error) { tg.showAlert(error.message);
     } finally { tg.MainButton.hideProgress().enable(); }
 }
-
 function renderAccountStep() {
-    setHeader('Регистрация', 'Шаг 3 из 4: Верификация');
+    setHeader('Регистрация', 'Шаг 3: Верификация');
     const cont = document.getElementById('register-container');
     cont.innerHTML = `<div class="form-step"><p>Адрес найден! Введите ваш <b>6-значный лицевой счет</b>.</p><input type="number" id="account-input" placeholder="000000" maxlength="6" inputmode="numeric"></div>`;
-    tg.MainButton.offClick(submitApartment).onClick(submitAccount);
+    tg.MainButton.offClick(handleApartmentSubmit).onClick(handleAccountSubmit);
 }
-
-function submitAccount() {
+function handleAccountSubmit() {
     const account = document.getElementById('account-input').value;
     if (!account || !/^\d{6}$/.test(account)) { tg.showAlert('Лицевой счет должен состоять из 6 цифр.'); return; }
     regData.account = account;
     renderEmailStep();
 }
-
 function renderEmailStep() {
-    setHeader('Регистрация', 'Шаг 4 из 4: Контакты');
+    setHeader('Регистрация', 'Шаг 4: Контакты (необязательно)');
     const cont = document.getElementById('register-container');
-    
-    // Используем HTML для создания псевдо-кнопки
-    cont.innerHTML = `<div class="form-step">
-        <p>Email (необязательно):</p>
-        <input type="email" id="email-input" placeholder="user@example.com" inputmode="email">
+    cont.innerHTML = `<div class="form-step"><p>Email:</p><input type="email" id="email-input" placeholder="user@example.com" inputmode="email">
         <div class="button-grid" style="margin-top: 20px; grid-template-columns: 1fr;">
-            <button class="grid-button" onclick="handleEmailSubmission(true)">Пропустить этот шаг</button>
-        </div>
-    </div>`;
-    
-    // Главная кнопка теперь для подтверждения email
-    tg.MainButton.setText('Подтвердить Email и далее').offClick(submitAccount).onClick(() => handleEmailSubmission(false));
-    tg.MainButton.show();
+        <button class="grid-button" onclick="handleEmailSubmit(true)">Пропустить</button></div></div>`;
+    tg.MainButton.setText('Подтвердить Email и далее').offClick(handleAccountSubmit).onClick(() => handleEmailSubmit(false));
 }
-
-// Новая функция для обработки шага с email
-function handleEmailSubmission(isSkipped) {
+function handleEmailSubmit(isSkipped) {
     const emailInput = document.getElementById('email-input');
-    const email = emailInput.value.trim();
-
-    if (isSkipped) {
-        regData.email = null;
-        renderPolicyStep(); // Переходим к политике
-        return;
-    }
-
-    if (email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    const email = emailInput ? emailInput.value.trim() : '';
+    if (isSkipped) regData.email = null;
+    else {
+        if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { tg.showAlert('Вы ввели некорректный Email.'); return; }
         regData.email = email;
-        renderPolicyStep(); // Переходим к политике
-    } else {
-        tg.showAlert('Вы ввели некорректный Email. Попробуйте снова или пропустите шаг.');
     }
+    renderPolicyStep();
 }
-
-// Новая функция для шага с политикой
 function renderPolicyStep() {
     setHeader('Регистрация', 'Финальный шаг: Согласие');
+    const user = tg.initDataUnsafe.user;
+    const userLogin = user.username ? `@${user.username}` : `ID: ${user.id}`;
+    const fullAddress = `Хабаровский край, г.Хабаровск, ул. Вахова, д. ${regData.building}, кв. ${regData.apartment}`;
+    const policyText = `Я, ${userLogin}, являясь потребителем жилищно-коммунальных услуг по адресу: ${fullAddress}, прошу осуществить мою авторизацию в телеграм приложении «ГВС ХВС» с целью дачи показаний по счётчикам ГВС и ХВС.<br><br>Даю согласие на предоставление и обработку персональных данных Оператору по ведению взаиморасчетов в соответствии с Федеральным законом от 27.07.2006г. № 152-ФЗ «О персональных данных».<br><br><b>Перечень персональных данных, на обработку которых дается согласие:</b><br>- Лицевой счет;<br>- Адрес;<br>- Номер контактного телефона и/или адрес электронной почты.<br><br><b>Целью обработки персональных данных</b> Оператором является надлежащее осуществление дачи показаний и оказание информационных услуг.<br><br>Согласие на обработку персональных данных выдается Оператору бессрочно, но может быть отозвано посредством письменного уведомления в Абонентный отдел. Потребитель подтверждает, что персональные данные могут быть получены Оператором от любых третьих лиц. Оператор не несет ответственность за достоверность персональных данных Потребителя, полученных от третьих лиц.`;
     const cont = document.getElementById('register-container');
-    
-    const policyText = `Я, ${userLogin}, являясь потребителем жилищно-коммунальных услуг по адресу: ${fullAddress}, прошу осуществить мою авторизацию в телеграм приложении «ГВС ХВС» с целью дачи показаний по счётчикам ГВС и ХВС.<br><br>
-Даю согласие на предоставление и обработку персональных данных Оператору по ведению взаиморасчетов в соответствии с Федеральным законом от 27.07.2006г. № 152-ФЗ «О персональных данных».<br><br>
-<b>Перечень персональных данных, на обработку которых дается согласие:</b><br>
-- Лицевой счет;<br>
-- Адрес;<br>
-- Номер контактного телефона и/или адрес электронной почты.<br><br>
-<b>Целью обработки персональных данных</b> Оператором является надлежащее осуществление дачи показаний и оказание информационных услуг.<br><br>
-Согласие на обработку персональных данных выдается Оператору бессрочно, но может быть отозвано посредством письменного уведомления в Абонентный отдел. Потребитель подтверждает, что персональные данные могут быть получены Оператором от любых третьих лиц. Оператор не несет ответственность за достоверность персональных данных Потребителя, полученных от третьих лиц.`;
-
     cont.innerHTML = `<div class="form-step"><p style="text-align: left; font-size: 14px;">${policyText}</p></div>`;
-
-    tg.MainButton.setText('✅ Согласен и завершить').offClick().onClick(finalSubmitWithPolicy);
-    tg.MainButton.show();
+    tg.MainButton.setText('✅ Согласен и завершить').offClick().onClick(finalSubmit);
 }
-
-// Финальная функция отправки
-async function finalSubmitWithPolicy() {
+async function finalSubmit() {
     tg.MainButton.showProgress().disable();
     try {
-        await apiFetch('/api/register', { 
-            method: 'POST', 
-            body: JSON.stringify(regData) 
-        });
+        const data = await apiFetch('/api/register', { method: 'POST', body: JSON.stringify(regData) });
+        appState.userData = data.user_data;
         tg.showAlert('✅ Регистрация успешно завершена!');
-        tg.close();
-    } catch (error) { 
-        tg.showAlert(`❌ Ошибка: ${error.message}`);
-    } finally { 
-        tg.MainButton.hideProgress().enable(); 
-    }
+        showPage('readings');
+    } catch (error) { tg.showAlert(`❌ Ошибка: ${error.message}`);
+    } finally { tg.MainButton.hideProgress().enable(); }
 }
-
 
 // --- Передача показаний ---
-async function loadReadingsData() {
-    setHeader('Передача показаний', 'Загрузка...');
-    try {
-        const data = await apiFetch('/api/get-meters');
-        hideLoader();
-        renderReadingsPage(data);
-    } catch (error) {
-        if (error.message.includes('403')) routeToRegistration();
-        else handleError(error.message);
-    }
-}
-function renderReadingsPage(data) {
+function renderReadingsPage() {
+    hideLoader();
+    const data = appState.userData;
     const metersContainer = document.getElementById('readings-container');
-    metersContainer.innerHTML = ''; metersContainer.classList.add('active');
+    metersContainer.innerHTML = '';
     setHeader('Передача показаний', `ул. Вахова, д. ${data.address.building}, кв. ${data.address.apartment}`);
     if (data.meters.length === 0) { metersContainer.innerHTML = '<p>Счетчики не найдены.</p>'; return; }
     
@@ -228,7 +175,7 @@ function renderReadingsPage(data) {
             <div class="meter-info">Заводской № ${meter.factory_number}</div>
             <div class="input-group">
                 <label for="meter_${meter.id}">Текущие показания (прошлые: ${meter.last_reading.toFixed(3).replace('.', ',')})</label>
-                <input type="text" id="meter_${meter.id}" inputmode="decimal" placeholder="12345,123">
+                <input type="text" id="meter_${meter.id}" inputmode="decimal" placeholder="123,456">
                 <div class="consumption-info" id="consumption_${meter.id}"></div>
             </div>`;
         metersContainer.appendChild(card);
@@ -243,7 +190,6 @@ function renderReadingsPage(data) {
     });
     tg.MainButton.setText('Отправить показания').show().onClick(submitReadings);
 }
-
 async function submitReadings() {
     const payload = { readings: [] };
     const inputs = document.querySelectorAll('#readings-container input[type="text"]');
@@ -253,7 +199,7 @@ async function submitReadings() {
         const valueStr = input.value.replace(',', '.').trim();
         if (valueStr === '') return;
         if (!/^\d{1,5}\.\d{3}$/.test(valueStr)) {
-            tg.showAlert(`Неверный формат показаний для счетчика №${meterId}. Пример: 123,456`);
+            tg.showAlert(`Неверный формат для счетчика №${meterId}. Пример: 123,456`);
             hasErrors = true; return;
         }
         payload.readings.push({ meter_id: meterId, value: parseFloat(valueStr) });
@@ -263,32 +209,63 @@ async function submitReadings() {
     }
     tg.MainButton.showProgress().disable();
     try {
-        await apiFetch('/api/submit-readings', {
-            method: 'POST',
-            body: JSON.stringify(payload)
-        });
+        await apiFetch('/api/submit-readings', { method: 'POST', body: JSON.stringify(payload) });
         tg.showAlert('✅ Показания успешно отправлены!');
         tg.close();
     } catch (error) { tg.showAlert(`❌ ${error.message}`);
     } finally { tg.MainButton.hideProgress().enable(); }
 }
 
-// --- Профиль и История ---
-async function loadProfileData() {
-    setHeader('Профиль', 'Загрузка...');
-    try {
-        const data = await apiFetch('/api/get-profile');
-        hideLoader();
-        renderProfilePage(data);
-    } catch (error) {
-        handleError(error.message);
-    }
-}
+// --- Профиль и сброс ---
+function renderProfilePage() {
+    hideLoader();
+    const data = appState.userData;
+    const profileContainer = document.getElementById('profile-container');
+    setHeader('Профиль', `ул. Вахова, д. ${data.address.building}, кв. ${data.address.apartment}`);
+    let profileHTML = `<div class="profile-section">
+            <p><strong>Логин:</strong> ${data.user.login}</p>
+            <p><strong>Email:</strong> ${data.user.email || 'не указан'}</p>
+            <p><strong>Лицевой счет:</strong> <code>${data.address.account_number}</code></p>
+        </div>`;
+    profileHTML += `<div class="history-section"><h3>📜 История показаний</h3>`;
+    if (data.meters.length > 0) {
+        data.meters.forEach(meter => {
+            profileHTML += `<h4>${meter.meter_type === 'ГВС' ? '🔥' : '❄️'} ${meter.meter_type} (№ ${meter.factory_number})</h4>`;
+            if (meter.history.length > 0) {
+                meter.history.forEach(rec => {
+                    profileHTML += `<div class="history-item"><strong>Период: ${rec.period}</strong><br>
+                        Показание: ${rec.curr_reading.toFixed(3).replace('.',',')} (Расход: ${rec.consumption.toFixed(3).replace('.',',')} м³)</div>`;
+                });
+            } else { profileHTML += `<div class="history-item">Нет истории.</div>`; }
+        });
+    } else { profileHTML += `<p>Счетчики не найдены.</p>`; }
+    profileHTML += `</div>`;
+    profileContainer.innerHTML = profileHTML;
 
+    const resetButton = document.createElement('button');
+    resetButton.className = 'full-width-button';
+    resetButton.textContent = '❌ Сбросить регистрацию';
+    resetButton.style.marginTop = '20px';
+    resetButton.onclick = handleResetClick;
+    profileContainer.appendChild(resetButton);
+}
+function handleResetClick() {
+    tg.showConfirm("Вы уверены, что хотите сбросить регистрацию? Это действие необратимо.", async (ok) => {
+        if (!ok) return;
+        // Показываем лоадер вручную, так как MainButton скрыта
+        const profileContainer = document.getElementById('profile-container');
+        profileContainer.innerHTML = '<div class="loader"></div>';
+        try {
+            await apiFetch('/api/reset-registration', { method: 'POST' });
+            appState.userData = null;
+            tg.showAlert('Регистрация сброшена. Приложение будет перезагружено.');
+            showPage('register');
+        } catch (error) { tg.showAlert(`❌ Ошибка: ${error.message}`); }
+    });
+}
 
 // --- Вспомогательные функции ---
 function setHeader(t, a) { document.getElementById('header-title').textContent = t; document.getElementById('header-address').textContent = a; }
 function showLoader() { document.querySelectorAll('.page').forEach(p => p.classList.remove('active')); document.getElementById('loader-container').classList.add('active'); }
 function hideLoader() { document.getElementById('loader-container').classList.remove('active'); }
 function handleError(m) { hideLoader(); const c = document.getElementById('error-container'); c.classList.add('active'); c.innerHTML = `<p style="text-align: center; color: red;">${m}</p>`; tg.MainButton.hide(); }
-
