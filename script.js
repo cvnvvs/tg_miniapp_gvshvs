@@ -1,5 +1,5 @@
 // ВАЖНО: Вставьте сюда ваш актуальный HTTPS URL от ngrok
-const API_BASE_URL = 'https://bunny-brave-externally.ngrok-free.app'; 
+const API_BASE_URL = 'https://your-ngrok-https-url.ngrok-free.app'; 
 
 const tg = window.Telegram.WebApp;
 
@@ -28,15 +28,12 @@ document.addEventListener('DOMContentLoaded', () => {
     document.body.style.visibility = 'visible';
     
     showLoader();
-    apiFetch('/api/get-profile')
-        .then(data => {
-            appState.userData = data;
-            showPage('profile');
-        })
-        .catch(() => showPage('register'));
+    apiFetch('/api/get-profile').then(data => {
+        appState.userData = data;
+        showPage('profile');
+    }).catch(() => showPage('register'));
 });
 
-// --- Навигация ---
 function showPage(pageName) {
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
     document.getElementById(`${pageName}-container`).classList.add('active');
@@ -66,14 +63,12 @@ function renderRegistrationStep1() {
         <button class="grid-button" onclick="handleBuildingSelect('8Г')">8Г</button>
         <button class="grid-button" onclick="handleBuildingSelect('8Д')">8Д</button></div></div>`;
 }
-
 function handleBuildingSelect(building) {
     appState.regData.building = building;
     setHeader('Регистрация', `Шаг 2: Номер квартиры`);
     document.getElementById('register-container').innerHTML = `<div class="form-step"><p>Строение <b>${building}</b>. Введите номер квартиры:</p><input type="number" id="apartment-input" placeholder="45" inputmode="numeric"></div>`;
     tg.MainButton.setText('Далее').show().onClick(handleApartmentSubmit);
 }
-
 async function handleApartmentSubmit() {
     const apartment = document.getElementById('apartment-input').value.trim();
     if (!apartment || !/^\d+$/.test(apartment)) { tg.showAlert('Введите корректный номер квартиры.'); return; }
@@ -85,21 +80,18 @@ async function handleApartmentSubmit() {
     } catch (error) { tg.showAlert(error.message);
     } finally { tg.MainButton.hideProgress().enable(); }
 }
-
 function renderAccountStep() {
     setHeader('Регистрация', 'Шаг 3: Верификация');
     document.getElementById('register-container').innerHTML = `<div class="form-step"><p>Адрес найден! Введите ваш <b>6-значный лицевой счет</b>.</p><input type="number" id="account-input" placeholder="000000" maxlength="6" inputmode="numeric"></div>`;
-    tg.BackButton.show().onClick(renderRegistrationStep1);
+    tg.BackButton.show().onClick(handleBuildingSelect.bind(null, appState.regData.building));
     tg.MainButton.offClick(handleApartmentSubmit).onClick(handleAccountSubmit);
 }
-
 function handleAccountSubmit() {
     const account = document.getElementById('account-input').value.trim();
     if (!account || !/^\d{6}$/.test(account)) { tg.showAlert('Лицевой счет должен состоять из 6 цифр.'); return; }
     appState.regData.account = account;
     renderEmailStep();
 }
-
 function renderEmailStep() {
     setHeader('Регистрация', 'Шаг 4: Контакты (необязательно)');
     document.getElementById('register-container').innerHTML = `<div class="form-step"><p>Email:</p><input type="email" id="email-input" placeholder="user@example.com" inputmode="email">
@@ -108,7 +100,6 @@ function renderEmailStep() {
     tg.MainButton.setText('Подтвердить Email и далее').offClick(handleAccountSubmit).onClick(() => handleEmailSubmit(false));
     tg.BackButton.show().onClick(renderAccountStep);
 }
-
 function handleEmailSubmit(isSkipped) {
     const emailInput = document.getElementById('email-input');
     const email = emailInput ? emailInput.value.trim() : '';
@@ -120,31 +111,24 @@ function handleEmailSubmit(isSkipped) {
     }
     renderPolicyStep();
 }
-
 function renderPolicyStep() {
     setHeader('Регистрация', 'Финальный шаг: Согласие');
     tg.MainButton.hide();
     tg.BackButton.show().onClick(renderEmailStep);
-    
     const user = tg.initDataUnsafe.user;
     const userLogin = user.username ? `@${user.username}` : `ID: ${user.id}`;
     const fullAddress = `Хабаровский край, г.Хабаровск, ул. Вахова, д. ${appState.regData.building}, кв. ${appState.regData.apartment}`;
     const policyText = `Я, ${userLogin}, являясь потребителем жилищно-коммунальных услуг по адресу: ${fullAddress}, прошу осуществить мою авторизацию в телеграм приложении «ГВС ХВС» с целью дачи показаний по счётчикам ГВС и ХВС.<br><br>Даю согласие на предоставление и обработку персональных данных Оператору по ведению взаиморасчетов в соответствии с Федеральным законом от 27.07.2006г. № 152-ФЗ «О персональных данных».<br><br><b>Перечень персональных данных, на обработку которых дается согласие:</b><br>- Лицевой счет;<br>- Адрес;<br>- Номер контактного телефона и/или адрес электронной почты.<br><br><b>Целью обработки персональных данных</b> Оператором является надлежащее осуществление дачи показаний и оказание информационных услуг.<br><br>Согласие на обработку персональных данных выдается Оператору бессрочно, но может быть отозвано посредством письменного уведомления в Абонентный отдел. Потребитель подтверждает, что персональные данные могут быть получены Оператором от любых третьих лиц. Оператор не несет ответственность за достоверность персональных данных Потребителя, полученных от третьих лиц.`;
-    
-    document.getElementById('register-container').innerHTML = `<div class="form-step">
-        <div style="text-align: left; font-size: 14px; max-height: 300px; overflow-y: auto; padding: 0 10px; margin-bottom: 20px;">${policyText}</div>
+    document.getElementById('register-container').innerHTML = `<div class="form-step"><div style="text-align: left; font-size: 14px; max-height: 300px; overflow-y: auto; padding-right: 10px; margin-bottom: 20px;">${policyText}</div>
         <div class="button-grid" style="gap: 15px;">
             <button class="full-width-button" onclick="finalSubmit()">✅ Согласен и завершить</button>
             <button class="grid-button" onclick="handlePolicyDecline()">❌ Не согласен</button>
-        </div>
-    </div>`;
+        </div></div>`;
 }
-
 function handlePolicyDecline() {
     tg.showAlert("Вы отказались от согласия. Регистрация отменена.");
     renderRegistrationStep1();
 }
-
 async function finalSubmit() {
     tg.BackButton.hide().offClick();
     showLoader();
@@ -171,9 +155,9 @@ function renderReadingsPage() {
     if (data.meters.length === 0) { metersContainer.innerHTML += '<p>Счетчики не найдены.</p>'; return; }
     
     data.meters.forEach(meter => {
-        const checkmark = meter.current_reading !== null ? '✅' : '';
         const button = document.createElement('button');
-        button.className = 'meter-button'; // Новый класс для стилизации
+        button.className = 'meter-button';
+        const checkmark = meter.current_reading !== null ? '✅' : '';
         button.innerHTML = `${checkmark} <span class="meter-button-icon">${meter.meter_type === 'ГВС' ? '🔥' : '❄️'}</span>
                             <span class="meter-button-type">${meter.meter_type}</span>
                             <span class="meter-button-num">№ ${meter.factory_number}</span>`;
@@ -190,15 +174,15 @@ function renderSingleReadingInput(meterId) {
     const container = document.getElementById('readings-container');
 
     const lastReadingStr = meter.last_reading.toFixed(3).replace('.', ',');
-    const currentReadingStr = meter.current_reading ? meter.current_reading.toFixed(3).replace('.',',') : '';
+    const [currentInt, currentDec] = meter.current_reading ? meter.current_reading.toFixed(3).split('.') : ['', ''];
     
     container.innerHTML = `<div class="form-step">
         <p>Показания за прошлый месяц: <code>${lastReadingStr}</code></p>
         <p>Введите текущие показания:</p>
         <div class="readings-input-wrapper">
-            <input type="number" id="reading-part1" class="readings-input-part" maxlength="5" placeholder="12345" inputmode="numeric" oninput="limitLength(this, 5)">
+            <input type="number" id="reading-part1" class="readings-input-part" maxlength="5" placeholder="00000" value="${currentInt}" inputmode="numeric" oninput="limitLength(this, 5)">
             <span class="readings-input-separator">,</span>
-            <input type="number" id="reading-part2" class="readings-input-part" maxlength="3" placeholder="678" inputmode="numeric" oninput="limitLength(this, 3)">
+            <input type="number" id="reading-part2" class="readings-input-part" maxlength="3" placeholder="000" value="${currentDec}" inputmode="numeric" oninput="limitLength(this, 3)">
         </div>
         <div class="consumption-info" id="consumption-live"></div>
         <p id="anomaly-warning" class="hidden" style="color: #ff8800; font-weight: bold;"></p>
@@ -209,7 +193,8 @@ function renderSingleReadingInput(meterId) {
     
     const updateLive = () => {
         const p1 = part1.value;
-        const p2 = part2.value.padEnd(3, '0');
+        const p2 = part2.value;
+        
         if (p1 && p2.length === 3) {
             const fullValue = parseFloat(`${p1}.${p2}`);
             if (isNaN(fullValue)) return;
@@ -234,21 +219,19 @@ function renderSingleReadingInput(meterId) {
     };
     part1.addEventListener('input', updateLive);
     part2.addEventListener('input', updateLive);
+    updateLive();
 }
 function limitLength(element, maxLength) {
-    if (element.value.length > maxLength) {
-        element.value = element.value.slice(0, maxLength);
-    }
+    if (element.value.length > maxLength) element.value = element.value.slice(0, maxLength);
 }
 async function submitSingleReading(meter, value) {
     tg.MainButton.showProgress().disable();
+    tg.BackButton.hide();
     try {
         const payload = { readings: [{ meter_id: meter.id, value: value }] };
-        await apiFetch('/api/submit-readings', { method: 'POST', body: JSON.stringify(payload) });
+        const data = await apiFetch('/api/submit-readings', { method: 'POST', body: JSON.stringify(payload) });
+        appState.userData = data.user_data; // Обновляем данные пользователя
         tg.showAlert('✅ Показания сохранены');
-        // Обновляем локальные данные и возвращаемся на страницу показаний
-        const updatedData = await apiFetch('/api/get-profile');
-        appState.userData = updatedData;
         showPage('readings');
     } catch(error) {
         tg.showAlert(`❌ Ошибка: ${error.message}`);
@@ -256,8 +239,6 @@ async function submitSingleReading(meter, value) {
         tg.MainButton.hideProgress().enable();
     }
 }
-
-
 
 // --- Профиль и сброс ---
 function renderProfilePage() {
@@ -267,32 +248,23 @@ function renderProfilePage() {
     
     const profileContainer = document.getElementById('profile-container');
     setHeader('Профиль', `ул. Вахова, д. ${data.address.building}, кв. ${data.address.apartment}`);
-    
     const emailText = data.user.email || 'не указан';
     const emailButtonText = data.user.email ? 'Изменить Email' : 'Добавить Email';
-
     let profileHTML = `<div class="profile-section">
-            <p><strong>Логин:</strong> ${data.user.login} (ID: ${data.user.user_id})</p>
+            <p><strong>Логин:</strong> ${data.user.login}</p>
             <p><strong>Email:</strong> ${emailText}</p>
             <p><strong>Лицевой счет:</strong> <code>${data.address.account_number}</code></p>
         </div><div class="history-section"><h3>📜 Информация по счетчикам</h3>`;
-    
     if (data.meters.length > 0) {
         data.meters.forEach(meter => {
-            const lastReadingStr = meter.last_reading.toFixed(3).replace('.', ',');
+            const lastReadingStr = meter.last_reading !== null ? `${meter.last_reading.toFixed(3).replace('.', ',')}` : '-';
             const currentReadingStr = meter.current_reading !== null ? `<b>${meter.current_reading.toFixed(3).replace('.', ',')}</b>` : '-';
-            const consumption = meter.current_reading !== null ? (meter.current_reading - meter.last_reading).toFixed(3).replace('.', ',') + ' м³' : '-';
-            
-            profileHTML += `<div class="meter-card">
-                <h4>${meter.meter_type === 'ГВС' ? '🔥' : '❄️'} ${meter.meter_type} (№ ${meter.factory_number})</h4>
+            profileHTML += `<div class="meter-card"><h4>${meter.meter_type === 'ГВС' ? '🔥' : '❄️'} ${meter.meter_type} (№ ${meter.factory_number})</h4>
                 <p><strong>Дата поверки:</strong> ${meter.checkup_date}</p>
-                <p><strong>Показания (прошлый месяц) от ${meter.initial_reading_date}:</strong> <code>${lastReadingStr}</code></p>
-                <p><strong>Показания (текущий месяц):</strong> <code>${currentReadingStr}</code></p>
-                <p><strong>Расход:</strong> <code>${consumption}</code></p>
-            </div>`;
+                <p><strong>Показания (прошлый месяц):</strong> <code>${lastReadingStr}</code></p>
+                <p><strong>Показания (текущий месяц):</strong> <code>${currentReadingStr}</code></p></div>`;
         });
     } else { profileHTML += `<p>Счетчики не найдены.</p>`; }
-    
     profileHTML += `</div>
         <div class="button-grid" style="gap: 15px;">
             <button class="grid-button" onclick="openEmailModal()">${emailButtonText}</button>
@@ -300,47 +272,38 @@ function renderProfilePage() {
         </div>`;
     profileContainer.innerHTML = profileHTML;
 }
-
 function openEmailModal() {
     document.getElementById('modal-input').value = appState.userData.user.email || '';
     document.getElementById('modal-overlay').classList.remove('hidden');
 }
-function closeModal() {
-    document.getElementById('modal-overlay').classList.add('hidden');
-}
+function closeModal() { document.getElementById('modal-overlay').classList.add('hidden'); }
 async function submitModal() {
     const email = document.getElementById('modal-input').value.trim();
-    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-        tg.showAlert('Неверный формат Email.'); return;
-    }
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { tg.showAlert('Неверный формат Email.'); return; }
     const newEmail = email || null;
     try {
         await apiFetch('/api/update-email', { method: 'POST', body: JSON.stringify({ email: newEmail }) });
         appState.userData.user.email = newEmail;
         tg.showAlert('Email успешно обновлен!');
         closeModal();
-        renderProfilePage(); // Перерисовываем профиль с новым email
+        renderProfilePage();
     } catch (error) { tg.showAlert(`❌ Ошибка: ${error.message}`); }
 }
-
 function handleResetClick() {
-    tg.showConfirm("Вы уверены, что хотите сменить квартиру? Текущая регистрация будет сброшена.", async (ok) => {
+    tg.showConfirm("Вы уверены, что хотите сменить квартиру? Это действие необратимо.", async (ok) => {
         if (!ok) return;
         showLoader();
         try {
             await apiFetch('/api/reset-registration', { method: 'POST' });
             appState.userData = null;
-            tg.showAlert('Регистрация сброшена. Теперь вы можете зарегистрировать новую квартиру.');
+            tg.showAlert('Регистрация сброшена.');
             showPage('register');
         } catch (error) { tg.showAlert(`❌ Ошибка: ${error.message}`); }
     });
 }
-
 
 // --- Вспомогательные функции ---
 function setHeader(t, a) { document.getElementById('header-title').textContent = t; document.getElementById('header-address').textContent = a; }
 function showLoader() { document.querySelectorAll('.page').forEach(p => p.classList.remove('active')); document.getElementById('loader-container').classList.add('active'); tg.MainButton.hide(); }
 function hideLoader() { document.getElementById('loader-container').classList.remove('active'); }
 function handleError(m) { hideLoader(); const c = document.getElementById('error-container'); c.classList.add('active'); c.innerHTML = `<p style="text-align: center; color: red;">${m}</p>`; tg.MainButton.hide(); }
-
-
