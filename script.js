@@ -65,12 +65,14 @@ function renderRegistrationStep1() {
         <button class="grid-button" onclick="handleBuildingSelect('8Г')">8Г</button>
         <button class="grid-button" onclick="handleBuildingSelect('8Д')">8Д</button></div></div>`;
 }
+
 function handleBuildingSelect(building) {
     appState.regData.building = building;
     setHeader('Регистрация', `Шаг 2: Номер квартиры`);
     document.getElementById('register-container').innerHTML = `<div class="form-step"><p>Строение <b>${building}</b>. Введите номер квартиры:</p><input type="number" id="apartment-input" placeholder="45" inputmode="numeric"></div>`;
     tg.MainButton.setText('Далее').show().onClick(handleApartmentSubmit);
 }
+
 async function handleApartmentSubmit() {
     const apartment = document.getElementById('apartment-input').value.trim();
     if (!apartment || !/^\d+$/.test(apartment)) { tg.showAlert('Введите корректный номер квартиры.'); return; }
@@ -82,25 +84,30 @@ async function handleApartmentSubmit() {
     } catch (error) { tg.showAlert(error.message);
     } finally { tg.MainButton.hideProgress().enable(); }
 }
+
 function renderAccountStep() {
     setHeader('Регистрация', 'Шаг 3: Верификация');
     document.getElementById('register-container').innerHTML = `<div class="form-step"><p>Адрес найден! Введите ваш <b>6-значный лицевой счет</b>.</p><input type="number" id="account-input" placeholder="000000" maxlength="6" inputmode="numeric"></div>`;
+    tg.BackButton.show().onClick(renderRegistrationStep1);
     tg.MainButton.offClick(handleApartmentSubmit).onClick(handleAccountSubmit);
 }
+
 function handleAccountSubmit() {
     const account = document.getElementById('account-input').value.trim();
     if (!account || !/^\d{6}$/.test(account)) { tg.showAlert('Лицевой счет должен состоять из 6 цифр.'); return; }
     appState.regData.account = account;
     renderEmailStep();
 }
+
 function renderEmailStep() {
     setHeader('Регистрация', 'Шаг 4: Контакты (необязательно)');
     document.getElementById('register-container').innerHTML = `<div class="form-step"><p>Email:</p><input type="email" id="email-input" placeholder="user@example.com" inputmode="email">
-        <div class="button-grid" style="margin-top: 20px; grid-template-columns: 1fr;">
+        <div class="button-grid" style="margin-top: 20px;">
         <button class="grid-button" onclick="handleEmailSubmit(true)">Пропустить</button></div></div>`;
     tg.MainButton.setText('Подтвердить Email и далее').offClick(handleAccountSubmit).onClick(() => handleEmailSubmit(false));
     tg.BackButton.show().onClick(renderAccountStep);
 }
+
 function handleEmailSubmit(isSkipped) {
     const emailInput = document.getElementById('email-input');
     const email = emailInput ? emailInput.value.trim() : '';
@@ -112,36 +119,46 @@ function handleEmailSubmit(isSkipped) {
     }
     renderPolicyStep();
 }
+
 function renderPolicyStep() {
     setHeader('Регистрация', 'Финальный шаг: Согласие');
+    tg.MainButton.hide();
+    tg.BackButton.show().onClick(renderEmailStep);
+    
     const user = tg.initDataUnsafe.user;
     const userLogin = user.username ? `@${user.username}` : `ID: ${user.id}`;
     const fullAddress = `Хабаровский край, г.Хабаровск, ул. Вахова, д. ${appState.regData.building}, кв. ${appState.regData.apartment}`;
-    const policyText = `Я, ${userLogin}, являясь потребителем... (ваш полный текст)`; // Сокращено
-    document.getElementById('register-container').innerHTML = `<div class="form-step"><div style="text-align: left; font-size: 14px; max-height: 300px; overflow-y: auto; padding-right: 10px;">${policyText}</div></div>`;
+    const policyText = `Я, ${userLogin}, являясь потребителем жилищно-коммунальных услуг по адресу: ${fullAddress}, прошу осуществить мою авторизацию в телеграм приложении «ГВС ХВС» с целью дачи показаний по счётчикам ГВС и ХВС.<br><br>Даю согласие на предоставление и обработку персональных данных Оператору по ведению взаиморасчетов в соответствии с Федеральным законом от 27.07.2006г. № 152-ФЗ «О персональных данных».<br><br><b>Перечень персональных данных, на обработку которых дается согласие:</b><br>- Лицевой счет;<br>- Адрес;<br>- Номер контактного телефона и/или адрес электронной почты.<br><br><b>Целью обработки персональных данных</b> Оператором является надлежащее осуществление дачи показаний и оказание информационных услуг.<br><br>Согласие на обработку персональных данных выдается Оператору бессрочно, но может быть отозвано посредством письменного уведомления в Абонентный отдел. Потребитель подтверждает, что персональные данные могут быть получены Оператором от любых третьих лиц. Оператор не несет ответственность за достоверность персональных данных Потребителя, полученных от третьих лиц.`;
     
-    // ИСПРАВЛЕНИЕ: Используем tg.showConfirm для явного согласия/отказа
-    tg.MainButton.setText('Продолжить').offClick().onClick(handlePolicyConfirm);
-    tg.BackButton.show().onClick(renderEmailStep);
+    document.getElementById('register-container').innerHTML = `<div class="form-step">
+        <div style="text-align: left; font-size: 14px; max-height: 300px; overflow-y: auto; padding: 0 10px; margin-bottom: 20px;">${policyText}</div>
+        <div class="button-grid" style="gap: 15px;">
+            <button class="full-width-button" onclick="finalSubmit()">✅ Согласен и завершить</button>
+            <button class="grid-button" onclick="handlePolicyDecline()">❌ Не согласен</button>
+        </div>
+    </div>`;
 }
-function handlePolicyConfirm() {
-    tg.showConfirm("Вы принимаете условия соглашения на обработку персональных данных?", async (ok) => {
-        if (ok) { await finalSubmit(); } 
-        else { tg.showAlert("Вы отказались от согласия. Регистрация отменена."); showPage('register'); }
-    });
+
+function handlePolicyDecline() {
+    tg.showAlert("Вы отказались от согласия. Регистрация отменена.");
+    renderRegistrationStep1();
 }
+
 async function finalSubmit() {
     tg.BackButton.hide().offClick();
-    tg.MainButton.showProgress().disable();
+    showLoader();
     try {
         const data = await apiFetch('/api/register', { method: 'POST', body: JSON.stringify(appState.regData) });
         appState.userData = data.user_data;
         tg.showAlert('✅ Регистрация успешно завершена!');
         showPage('profile');
-    } catch (error) { tg.showAlert(`❌ Ошибка: ${error.message}`);
-    } finally { tg.MainButton.hideProgress().enable(); }
+    } catch (error) { 
+        tg.showAlert(`❌ Ошибка: ${error.message}`);
+        showPage('register');
+    }
 }
 
+// --- Передача показаний ---
 function renderReadingsPage() {
     hideLoader();
     const data = appState.userData;
@@ -165,15 +182,15 @@ function renderReadingsPage() {
         const consumptionDiv = card.querySelector(`#consumption_${meter.id}`);
         const calculateConsumption = () => {
             const currentValue = parseFloat(input.value.replace(',', '.'));
-            if (!isNaN(currentValue)) {
-                consumptionDiv.textContent = `Расход: ${(currentValue - meter.last_reading).toFixed(3).replace('.', ',')} м³`;
-            } else { consumptionDiv.textContent = ''; }
+            if (!isNaN(currentValue)) consumptionDiv.textContent = `Расход: ${(currentValue - meter.last_reading).toFixed(3).replace('.', ',')} м³`;
+            else consumptionDiv.textContent = '';
         };
         input.addEventListener('input', calculateConsumption);
-        calculateConsumption(); // Вызываем сразу для предзаполненных значений
+        calculateConsumption();
     });
     tg.MainButton.setText('Отправить показания').show().onClick(submitReadings);
 }
+
 async function submitReadings() {
     const payload = { readings: [] };
     const inputs = document.querySelectorAll('#readings-container input[type="text"]');
@@ -199,6 +216,8 @@ async function submitReadings() {
     } catch (error) { tg.showAlert(`❌ ${error.message}`);
     } finally { tg.MainButton.hideProgress().enable(); }
 }
+
+
 
 // --- Профиль и сброс ---
 function renderProfilePage() {
@@ -231,6 +250,7 @@ function renderProfilePage() {
     resetButton.onclick = handleResetClick;
     profileContainer.appendChild(resetButton);
 }
+
 function handleResetClick() {
     tg.showConfirm("Вы уверены, что хотите сбросить регистрацию? Это действие необратимо.", async (ok) => {
         if (!ok) return;
@@ -246,6 +266,8 @@ function handleResetClick() {
 
 // --- Вспомогательные функции ---
 function setHeader(t, a) { document.getElementById('header-title').textContent = t; document.getElementById('header-address').textContent = a; }
-function showLoader() { document.querySelectorAll('.page').forEach(p => p.classList.remove('active')); document.getElementById('loader-container').classList.add('active'); }
+function showLoader() { document.querySelectorAll('.page').forEach(p => p.classList.remove('active')); document.getElementById('loader-container').classList.add('active'); tg.MainButton.hide(); }
 function hideLoader() { document.getElementById('loader-container').classList.remove('active'); }
 function handleError(m) { hideLoader(); const c = document.getElementById('error-container'); c.classList.add('active'); c.innerHTML = `<p style="text-align: center; color: red;">${m}</p>`; tg.MainButton.hide(); }
+
+
