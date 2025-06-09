@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Передача показаний</title>
+    <link rel="stylesheet" href="style.css">
+    <!-- Скрипт для интеграции с Telegram -->
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+</head>
+<body>
+    <div class="container">
+        <div id="header" class="header">
+            <h1 id="header-title">Загрузка данных...</h1>
+            <p id="header-address"></p>
+        </div>
+
+        <div id="meters-container">
+            <div class="loader"></div>
+        </div>
+        
+        <div id="profile-container" class="hidden">
+            <!-- Сюда будет рендериться профиль -->
+        </div>
+
+    </div>
+
+    <!-- Основной скрипт приложения -->
+    <script src="script.js"></script>
+</body>
+</html>
