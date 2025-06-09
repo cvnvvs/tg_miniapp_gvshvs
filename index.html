@@ -8,21 +8,35 @@
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
 <body>
-    <div class="container">
+    <div id="app-container">
         <div id="header" class="header">
             <h1 id="header-title">Загрузка...</h1>
             <p id="header-address"></p>
         </div>
 
-        <div id="loader-container" class="page active">
-            <div class="loader"></div>
+        <div class="content">
+            <div id="loader-container" class="page active">
+                <div class="loader"></div>
+            </div>
+            <div id="readings-container" class="page"></div>
+            <div id="profile-container" class="page"></div>
+            <div id="register-container" class="page"></div>
+            <div id="error-container" class="page"></div>
         </div>
-
-        <div id="readings-container" class="page"></div>
-        <div id="profile-container" class="page"></div>
-        <div id="register-container" class="page"></div>
-        <div id="error-container" class="page"></div>
     </div>
+    
+    <!-- НИЖНЕЕ МЕНЮ (ТАБЫ) -->
+    <div id="tab-bar" class="tab-bar hidden">
+        <button class="tab-button active" onclick="showPage('readings')">
+            <span>💧</span>
+            <p>Показания</p>
+        </button>
+        <button class="tab-button" onclick="showPage('profile')">
+            <span>👤</span>
+            <p>Профиль</p>
+        </button>
+    </div>
+
     <script src="script.js"></script>
 </body>
 </html>
