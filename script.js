@@ -6,6 +6,7 @@ const tg = window.Telegram.WebApp;
 let appState = { userData: null, regData: {} };
 
 async function apiFetch(endpoint, options = {}) {
+    // ИСПРАВЛЕНИЕ: Улучшенная обработка ошибок
     const isPrivate = options.private !== false;
     const headers = { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' };
     if (isPrivate) {
@@ -16,9 +17,19 @@ async function apiFetch(endpoint, options = {}) {
     try {
         const response = await fetch(`${API_BASE_URL}${endpoint}`, config);
         if (response.ok) return response.status === 204 ? null : response.json();
-        const errorData = await response.json();
-        throw new Error(errorData.detail || 'Ошибка сервера.');
-    } catch (e) { throw new Error(e.message || 'Ошибка сети.'); }
+        
+        // Если ответ не ОК, пытаемся прочитать ошибку
+        try {
+            const errorData = await response.json();
+            throw new Error(errorData.detail || `Ошибка сервера: ${response.status}`);
+        } catch (e) {
+            // Если ответ не JSON (например, 502 от ngrok), показываем общую ошибку
+            throw new Error(`Ошибка сети или сервера: ${response.status} ${response.statusText}`);
+        }
+    } catch (e) {
+        // Ловим ошибки сети (failed to fetch)
+        throw new Error(e.message || 'Ошибка сети. Проверьте подключение.');
+    }
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -149,21 +160,40 @@ function renderReadingsPage() {
     hideLoader();
     const data = appState.userData;
     if (!data) { handleError("Не удалось загрузить данные пользователя."); return; }
-    const metersContainer = document.getElementById('readings-container');
-    metersContainer.innerHTML = '<h3>Выберите счетчик для ввода показаний</h3>';
-    setHeader('Передача показаний', `ул. Вахова, д. ${data.address.building}, кв. ${data.address.apartment}`);
-    if (data.meters.length === 0) { metersContainer.innerHTML += '<p>Счетчики не найдены.</p>'; return; }
     
-    data.meters.forEach(meter => {
-        const button = document.createElement('button');
-        button.className = 'meter-button';
-        const checkmark = meter.current_reading !== null ? '✅' : '';
-        button.innerHTML = `${checkmark} <span class="meter-button-icon">${meter.meter_type === 'ГВС' ? '🔥' : '❄️'}</span>
-                            <span class="meter-button-type">${meter.meter_type}</span>
-                            <span class="meter-button-num">№ ${meter.factory_number}</span>`;
-        button.onclick = () => renderSingleReadingInput(meter.id);
-        metersContainer.appendChild(button);
-    });
+    const metersContainer = document.getElementById('readings-container');
+    setHeader('Передача показаний', `ул. Вахова, д. ${data.address.building}, кв. ${data.address.apartment}`);
+    
+    // Создаем контейнер-сетку для кнопок
+    let metersHTML = '<div class="meters-grid">';
+    
+    if (data.meters.length === 0) {
+        metersHTML = '<p>Счетчики не найдены.</p>';
+    } else {
+        const sortedMeters = data.meters.sort((a, b) => a.meter_type.localeCompare(b.meter_type));
+        sortedMeters.forEach(meter => {
+            const isSubmitted = meter.current_reading !== null;
+            const buttonClass = isSubmitted ? 'meter-button submitted' : 'meter-button';
+            const checkmarkHTML = isSubmitted ? '<span class="checkmark">✅</span>' : '';
+            const icon = meter.meter_type === 'ГВС' ? '🔥' : '❄️';
+            
+            metersHTML += `
+                <button class="${buttonClass}" onclick="renderSingleReadingInput(${meter.id})">
+                    <span class="meter-button-icon">${icon}</span>
+                    <div class="meter-button-text">
+                        <span class="meter-button-type">${meter.meter_type}</span>
+                        <span class="meter-button-num">№ ${meter.factory_number}</span>
+                    </div>
+                    ${checkmarkHTML}
+                </button>
+            `;
+        });
+    }
+    metersHTML += '</div>';
+    metersContainer.innerHTML = metersHTML;
+
+    // Кнопка "Готово" не нужна, так как сохранение происходит для каждого счетчика отдельно
+    tg.MainButton.hide(); 
 }
 function renderSingleReadingInput(meterId) {
     const meter = appState.userData.meters.find(m => m.id === meterId);
@@ -188,7 +218,7 @@ function renderSingleReadingInput(meterId) {
         <p id="anomaly-warning" class="hidden" style="color: #ff8800; font-weight: bold;"></p>
     </div>`;
     
-    const updateLiveInput = () => {
+    window.updateLiveInput = () => { // Делаем функцию глобальной для доступа из oninput
         const part1 = document.getElementById('reading-part1');
         const part2 = document.getElementById('reading-part2');
         const p1 = part1.value;
@@ -216,6 +246,9 @@ function renderSingleReadingInput(meterId) {
             document.getElementById('anomaly-warning').classList.add('hidden');
         }
     };
+    window.limitLength = (element, maxLength) => { // Тоже делаем глобальной
+        if (element.value.length > maxLength) element.value = element.value.slice(0, maxLength);
+    };
     updateLiveInput();
 }
 function limitLength(element, maxLength) {
@@ -232,8 +265,9 @@ async function submitSingleReading(meter, value) {
         showPage('readings');
     } catch(error) {
         tg.showAlert(`❌ Ошибка: ${error.message}`);
-    } finally {
+        // ИСПРАВЛЕНИЕ: В случае ошибки возвращаем на страницу показаний
         tg.MainButton.hideProgress().enable();
+        showPage('readings');
     }
 }
 
