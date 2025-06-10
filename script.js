@@ -18,7 +18,9 @@ async function apiFetch(endpoint, options = {}) {
         if (response.ok) return response.status === 204 ? null : response.json();
         const errorData = await response.json();
         throw new Error(errorData.detail || 'Ошибка сервера.');
-    } catch (e) { throw new Error(e.message || 'Ошибка сети.'); }
+    } catch (e) {
+        throw new Error(e.message || 'Ошибка сети.');
+    }
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -49,6 +51,7 @@ function showPage(pageName) {
         document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
         const targetTab = document.querySelector(`.tab-button[onclick*="'${pageName}'"]`);
         if (targetTab) targetTab.classList.add('active');
+        
         if (pageName === 'readings') renderReadingsPage();
         else renderProfilePage();
     } else {
@@ -57,7 +60,7 @@ function showPage(pageName) {
     }
 }
 
-// --- Регистрация ---
+// --- Регистрация (без изменений, но с полным текстом политики) ---
 function renderRegistrationStep1() {
     hideLoader();
     setHeader('Регистрация', 'Шаг 1: Выбор строения');
@@ -121,7 +124,7 @@ function renderPolicyStep() {
     const user = tg.initDataUnsafe.user;
     const userLogin = user.username ? `@${user.username}` : `ID: ${user.id}`;
     const fullAddress = `Хабаровский край, г.Хабаровск, ул. Вахова, д. ${appState.regData.building}, кв. ${appState.regData.apartment}`;
-    const policyText = `Я, ${userLogin}, являясь потребителем... (ваш полный текст)`;
+    const policyText = `Я, ${userLogin}, являясь потребителем жилищно-коммунальных услуг по адресу: ${fullAddress}, прошу осуществить мою авторизацию в телеграм приложении «ГВС ХВС» с целью дачи показаний по счётчикам ГВС и ХВС.<br><br>Даю согласие на предоставление и обработку персональных данных Оператору по ведению взаиморасчетов в соответствии с Федеральным законом от 27.07.2006г. № 152-ФЗ «О персональных данных».<br><br><b>Перечень персональных данных, на обработку которых дается согласие:</b><br>- Лицевой счет;<br>- Адрес;<br>- Номер контактного телефона и/или адрес электронной почты.<br><br><b>Целью обработки персональных данных</b> Оператором является надлежащее осуществление дачи показаний и оказание информационных услуг.<br><br>Согласие на обработку персональных данных выдается Оператору бессрочно, но может быть отозвано посредством письменного уведомления в Абонентный отдел. Потребитель подтверждает, что персональные данные могут быть получены Оператором от любых третьих лиц. Оператор не несет ответственность за достоверность персональных данных Потребителя, полученных от третьих лиц.`;
     document.getElementById('register-container').innerHTML = `<div class="form-step"><div style="text-align: left; font-size: 14px; max-height: 300px; overflow-y: auto; padding-right: 10px; margin-bottom: 20px;">${policyText}</div>
         <div class="button-grid" style="gap: 15px;">
             <button class="full-width-button" onclick="finalSubmit()">✅ Согласен и завершить</button>
@@ -140,7 +143,7 @@ async function finalSubmit() {
         appState.userData = data.user_data;
         tg.HapticFeedback.notificationOccurred('success');
         tg.showAlert('✅ Регистрация успешно завершена!');
-        showPage('profile'); // Показываем профиль после регистрации
+        showPage('profile');
     } catch (error) { 
         tg.showAlert(`❌ Ошибка: ${error.message}`);
         showPage('register');
@@ -182,9 +185,7 @@ function renderReadingsPage() {
     metersContainer.innerHTML = metersHTML;
 }
 function renderSingleReadingInput(meterId) {
-    // ИСПРАВЛЕНИЕ: Скрываем табы при входе в режим ввода
     document.getElementById('tab-bar').classList.add('hidden');
-    
     const meter = appState.userData.meters.find(m => m.id === meterId);
     if (!meter) { handleError("Счетчик не найден"); return; }
     
@@ -235,10 +236,9 @@ async function submitSingleReading(meter, value) {
     try {
         const payload = { readings: [{ meter_id: meter.id, value: value }] };
         const data = await apiFetch('/api/submit-readings', { method: 'POST', body: JSON.stringify(payload) });
-        // ИСПРАВЛЕНИЕ: Обновляем локальное состояние и перерисовываем страницу
         appState.userData = data.user_data;
         tg.HapticFeedback.notificationOccurred('success');
-        showPage('readings'); // Возвращаемся к списку счетчиков
+        showPage('readings');
     } catch(error) {
         tg.showAlert(`❌ Ошибка: ${error.message}`);
         tg.MainButton.hideProgress().enable();
@@ -292,10 +292,10 @@ async function submitModal() {
     document.getElementById('modal-content').innerHTML = '<div class="loader"></div>';
     try {
         await apiFetch('/api/update-email', { method: 'POST', body: JSON.stringify({ email: newEmail }) });
-        // ИСПРАВЛЕНИЕ: Обновляем локальное состояние и перерисовываем страницу
         const updatedData = await apiFetch('/api/get-profile');
         appState.userData = updatedData;
         tg.HapticFeedback.notificationOccurred('success');
+        tg.showAlert('Email успешно обновлен!');
         closeModal();
         renderProfilePage();
     } catch (error) { tg.showAlert(`❌ Ошибка: ${error.message}`); closeModal(); }
@@ -307,7 +307,6 @@ function handleResetClick() {
         try {
             await apiFetch('/api/reset-registration', { method: 'POST' });
             appState.userData = null;
-            tg.HapticFeedback.notificationOccurred('success');
             tg.showAlert('Регистрация сброшена.');
             showPage('register');
         } catch (error) { tg.showAlert(`❌ Ошибка: ${error.message}`); }
