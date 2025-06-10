@@ -3,7 +3,8 @@ const API_BASE_URL = 'https://bunny-brave-externally.ngrok-free.app';
 
 const tg = window.Telegram.WebApp;
 
-let appState = { userData: null, regData: {} };
+// Глобальное состояние теперь используется только для временных данных регистрации
+let regData = {};
 
 async function apiFetch(endpoint, options = {}) {
     const isPrivate = options.private !== false;
@@ -18,9 +19,7 @@ async function apiFetch(endpoint, options = {}) {
         if (response.ok) return response.status === 204 ? null : response.json();
         const errorData = await response.json();
         throw new Error(errorData.detail || 'Ошибка сервера.');
-    } catch (e) {
-        throw new Error(e.message || 'Ошибка сети.');
-    }
+    } catch (e) { throw new Error(e.message || 'Ошибка сети.'); }
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -33,18 +32,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
 function initialize() {
     showLoader();
-    apiFetch('/api/get-profile').then(data => {
-        appState.userData = data;
-        showPage('profile');
-    }).catch(() => showPage('register'));
+    // Мы всегда запрашиваем актуальные данные с сервера
+    apiFetch('/api/get-profile')
+        .then(data => showPage('profile', data)) // Если успешно, показываем профиль
+        .catch(() => showPage('register')); // Если ошибка (403), показываем регистрацию
 }
 
-
-function showPage(pageName, data = null) {
-    if (data) {
-        appState.userData = data;
-    }
-
+function showPage(pageName, data) {
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
     document.getElementById(`${pageName}-container`).classList.add('active');
     tg.MainButton.hide();
@@ -57,15 +51,15 @@ function showPage(pageName, data = null) {
         const targetTab = document.querySelector(`.tab-button[onclick*="'${pageName}'"]`);
         if (targetTab) targetTab.classList.add('active');
         
-        // Передаем данные в функции рендеринга
-        if (pageName === 'readings') renderReadingsPage(appState.userData);
-        else renderProfilePage(appState.userData);
+        if (pageName === 'readings') renderReadingsPage(data);
+        else renderProfilePage(data);
     } else {
         tabBar.classList.add('hidden');
         if (pageName === 'register') renderRegistrationStep1();
     }
 }
-// --- Регистрация (без изменений, но с полным текстом политики) ---
+
+// --- Регистрация ---
 function renderRegistrationStep1() {
     hideLoader();
     setHeader('Регистрация', 'Шаг 1: Выбор строения');
@@ -75,7 +69,7 @@ function renderRegistrationStep1() {
         <button class="grid-button" onclick="handleBuildingSelect('8Д')">8Д</button></div></div>`;
 }
 function handleBuildingSelect(building) {
-    appState.regData.building = building;
+    regData.building = building;
     setHeader('Регистрация', `Шаг 2: Номер квартиры`);
     document.getElementById('register-container').innerHTML = `<div class="form-step"><p>Строение <b>${building}</b>. Введите номер квартиры:</p><input type="number" id="apartment-input" placeholder="45" inputmode="numeric"></div>`;
     tg.MainButton.setText('Далее').show().onClick(handleApartmentSubmit);
@@ -83,10 +77,10 @@ function handleBuildingSelect(building) {
 async function handleApartmentSubmit() {
     const apartment = document.getElementById('apartment-input').value.trim();
     if (!apartment || !/^\d+$/.test(apartment)) { tg.showAlert('Введите корректный номер квартиры.'); return; }
-    appState.regData.apartment = apartment;
+    regData.apartment = apartment;
     tg.MainButton.showProgress().disable();
     try {
-        await apiFetch('/api/check-address', { method: 'POST', body: JSON.stringify(appState.regData), private: false });
+        await apiFetch('/api/check-address', { method: 'POST', body: JSON.stringify(regData), private: false });
         renderAccountStep();
     } catch (error) { tg.showAlert(error.message);
     } finally { tg.MainButton.hideProgress().enable(); }
@@ -94,13 +88,13 @@ async function handleApartmentSubmit() {
 function renderAccountStep() {
     setHeader('Регистрация', 'Шаг 3: Верификация');
     document.getElementById('register-container').innerHTML = `<div class="form-step"><p>Адрес найден! Введите ваш <b>6-значный лицевой счет</b>.</p><input type="number" id="account-input" placeholder="000000" maxlength="6" inputmode="numeric"></div>`;
-    tg.BackButton.show().onClick(handleBuildingSelect.bind(null, appState.regData.building));
+    tg.BackButton.show().onClick(handleBuildingSelect.bind(null, regData.building));
     tg.MainButton.offClick(handleApartmentSubmit).onClick(handleAccountSubmit);
 }
 function handleAccountSubmit() {
     const account = document.getElementById('account-input').value.trim();
     if (!account || !/^\d{6}$/.test(account)) { tg.showAlert('Лицевой счет должен состоять из 6 цифр.'); return; }
-    appState.regData.account = account;
+    regData.account = account;
     renderEmailStep();
 }
 function renderEmailStep() {
@@ -114,11 +108,10 @@ function renderEmailStep() {
 function handleEmailSubmit(isSkipped) {
     const emailInput = document.getElementById('email-input');
     const email = emailInput ? emailInput.value.trim() : '';
-    if (isSkipped) {
-        appState.regData.email = null;
-    } else {
+    if (isSkipped) regData.email = null;
+    else {
         if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { tg.showAlert('Неверный формат Email.'); return; }
-        appState.regData.email = email;
+        regData.email = email;
     }
     renderPolicyStep();
 }
@@ -142,15 +135,14 @@ function handlePolicyDecline() {
 }
 async function finalSubmit() {
     tg.BackButton.hide().offClick();
-    showLoader();
+    tg.MainButton.showProgress().disable();
     try {
-        const data = await apiFetch('/api/register', { method: 'POST', body: JSON.stringify(appState.regData) });
+        await apiFetch('/api/register', { method: 'POST', body: JSON.stringify(regData) });
         tg.HapticFeedback.notificationOccurred('success');
-        tg.showAlert('✅ Регистрация успешно завершена!');
-        // ИСПРАВЛЕНИЕ: Явно передаем свежие данные на отрисовку
-        showPage('profile', data.user_data);
+        tg.showAlert('✅ Регистрация успешно завершена! Приложение будет перезагружено.', () => location.reload());
     } catch (error) { 
         tg.showAlert(`❌ Ошибка: ${error.message}`);
+        tg.MainButton.hideProgress().enable();
         showPage('register');
     }
 }
@@ -159,26 +151,18 @@ async function finalSubmit() {
 function renderReadingsPage(data) {
     hideLoader();
     if (!data) { handleError("Не удалось загрузить данные пользователя."); return; }
-    
     const metersContainer = document.getElementById('readings-container');
     setHeader('Передача показаний', `ул. Вахова, д. ${data.address.building}, кв. ${data.address.apartment}`);
     let metersHTML = '<div class="meters-grid">';
-    
-    if (data.meters.length === 0) {
-        metersHTML = '<p>Счетчики не найдены.</p>';
-    } else {
+    if (data.meters.length === 0) metersHTML = '<p>Счетчики не найдены.</p>';
+    else {
         const sortedMeters = data.meters.sort((a, b) => a.meter_type.localeCompare(b.meter_type) || a.id - b.id);
         sortedMeters.forEach(meter => {
             const isSubmitted = meter.current_reading !== null;
             const buttonClass = isSubmitted ? 'meter-button submitted' : 'meter-button';
             const checkmarkHTML = isSubmitted ? '<span class="checkmark">✅</span>' : '';
             const icon = meter.meter_type === 'ГВС' ? '🔥' : '❄️';
-            metersHTML += `<button class="${buttonClass}" onclick="renderSingleReadingInput(${meter.id})">
-                <span class="meter-button-icon">${icon}</span>
-                <div class="meter-button-text">
-                    <span class="meter-button-type">${meter.meter_type}</span>
-                    <span class="meter-button-num">№ ${meter.factory_number}</span>
-                </div>${checkmarkHTML}</button>`;
+            metersHTML += `<button class="${buttonClass}" onclick="renderSingleReadingInput(${meter.id})">${icon}<div class="meter-button-text">...</div>${checkmarkHTML}</button>`;
         });
     }
     metersHTML += '</div>';
@@ -235,23 +219,21 @@ async function submitSingleReading(meter, value) {
     tg.BackButton.hide().offClick();
     try {
         const payload = { readings: [{ meter_id: meter.id, value: value }] };
-        const data = await apiFetch('/api/submit-readings', { method: 'POST', body: JSON.stringify(payload) });
+        await apiFetch('/api/submit-readings', { method: 'POST', body: JSON.stringify(payload) });
         tg.HapticFeedback.notificationOccurred('success');
-        tg.showAlert('✅ Показания сохранены');
-        // ИСПРАВЛЕНИЕ: Передаем свежие данные напрямую в showPage
-        showPage('readings', data.user_data);
+        tg.showAlert('✅ Показания сохранены. Обновляем страницу...', () => location.reload());
     } catch(error) {
         tg.showAlert(`❌ Ошибка: ${error.message}`);
         tg.MainButton.hideProgress().enable();
-        tg.BackButton.show().onClick(() => showPage('readings'));
+        tg.BackButton.show().onClick(() => showPage('readings', appState.userData));
     }
 }
 
 // --- Профиль и сброс ---
-function renderProfilePage() {
+function renderProfilePage(data) {
     hideLoader();
-    const data = appState.userData;
     if (!data) { handleError("Не удалось загрузить данные пользователя."); return; }
+    const profileContainer = document.getElementById('profile-container');
     
     const profileContainer = document.getElementById('profile-container');
     setHeader('Профиль', `ул. Вахова, д. ${data.address.building}, кв. ${data.address.apartment}`);
@@ -286,30 +268,25 @@ function openEmailModal() {
     document.getElementById('modal-overlay').classList.remove('hidden');
 }
 function closeModal() { document.getElementById('modal-overlay').classList.add('hidden'); }
-async function submitModal() {
+async function submitModal() { // Смена email
     const email = document.getElementById('modal-input').value.trim();
     if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { tg.showAlert('Неверный формат Email.'); return; }
     const newEmail = email || null;
     document.getElementById('modal-content').innerHTML = '<div class="loader"></div>';
     try {
         await apiFetch('/api/update-email', { method: 'POST', body: JSON.stringify({ email: newEmail }) });
-        const updatedData = await apiFetch('/api/get-profile');
         tg.HapticFeedback.notificationOccurred('success');
-        tg.showAlert('Email успешно обновлен!');
-        closeModal();
-        // ИСПРАВЛЕНИЕ: Явно передаем свежие данные на отрисовку
-        showPage('profile', updatedData);
+        tg.showAlert('Email успешно обновлен! Обновляем страницу...', () => location.reload());
     } catch (error) { tg.showAlert(`❌ Ошибка: ${error.message}`); closeModal(); }
 }
-function handleResetClick() {
+function handleResetClick() { // Сброс регистрации
     tg.showConfirm("Вы уверены, что хотите сменить квартиру?", async (ok) => {
         if (!ok) return;
         showLoader();
         try {
             await apiFetch('/api/reset-registration', { method: 'POST' });
-            appState.userData = null;
-            tg.showAlert('Регистрация сброшена.');
-            showPage('register');
+            tg.HapticFeedback.notificationOccurred('success');
+            tg.showAlert('Регистрация сброшена. Приложение будет перезагружено.', () => location.reload());
         } catch (error) { tg.showAlert(`❌ Ошибка: ${error.message}`); }
     });
 }
