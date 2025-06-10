@@ -157,8 +157,17 @@ async function finalSubmit() {
 function renderReadingsPage(data) {
     hideLoader();
     if (!data) { handleError("Не удалось загрузить данные пользователя."); return; }
+    
     const metersContainer = document.getElementById('readings-container');
     setHeader('Передача показаний', `ул. Вахова, д. ${data.address.building}, кв. ${data.address.apartment}`);
+    
+    // ИСПРАВЛЕНИЕ: Проверяем флаг с бэкенда
+    if (!data.is_active_period) {
+        metersContainer.innerHTML = `<div class="form-step"><p>📅 Прием показаний закрыт.<br>Доступно только с 20 по 25 число месяца.</p></div>`;
+        tg.MainButton.hide();
+        return;
+    }
+    
     let metersHTML = '<div class="meters-grid">';
     if (data.meters.length === 0) {
         metersHTML = '<p>Счетчики не найдены.</p>';
@@ -169,18 +178,22 @@ function renderReadingsPage(data) {
             const buttonClass = isSubmitted ? 'meter-button submitted' : 'meter-button';
             const checkmarkHTML = isSubmitted ? '<span class="checkmark">✅</span>' : '';
             const icon = meter.meter_type === 'ГВС' ? '🔥' : '❄️';
-            metersHTML += `<button class="${buttonClass}" onclick="renderSingleReadingInput(${meter.id})">
-                <span class="meter-button-icon">${icon}</span>
-                <div class="meter-button-text">
-                    <span class="meter-button-type">${meter.meter_type}</span>
-                    <span class="meter-button-num">№ ${meter.factory_number}</span>
-                </div>
-                ${checkmarkHTML}</button>`;
+            
+            metersHTML += `
+                <button class="${buttonClass}" onclick="renderSingleReadingInput(${meter.id})">
+                    <span class="meter-button-icon">${icon}</span>
+                    <div class="meter-button-text">
+                        <span class="meter-button-type">${meter.meter_type}</span>
+                        <span class="meter-button-num">№ ${meter.factory_number}</span>
+                    </div>
+                    ${checkmarkHTML}
+                </button>`;
         });
     }
     metersHTML += '</div>';
     metersContainer.innerHTML = metersHTML;
 }
+
 function renderSingleReadingInput(meterId) {
     document.getElementById('tab-bar').classList.add('hidden');
     const meter = appState.userData.meters.find(m => m.id === meterId);
