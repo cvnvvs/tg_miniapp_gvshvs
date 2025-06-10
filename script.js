@@ -271,15 +271,39 @@ function openEmailModal() {
 }
 function closeModal() { document.getElementById('modal-overlay').classList.add('hidden'); }
 async function submitModal() {
-    const email = document.getElementById('modal-input').value.trim();
-    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { tg.showAlert('Неверный формат Email.'); return; }
-    const newEmail = email || null;
-    document.getElementById('modal-content').innerHTML = '<div class="loader"></div>';
+    const emailInput = document.getElementById('modal-input');
+    const newEmail = emailInput.value.trim() || null; // Если поле пустое, отправляем null
+
+    if (newEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail)) {
+        tg.showAlert('Неверный формат Email.'); 
+        return;
+    }
+
+    // Показываем индикатор загрузки на кнопке, а не стираем контент
+    const confirmButton = document.querySelector('.modal-button-confirm');
+    const originalButtonText = confirmButton.textContent;
+    confirmButton.textContent = 'Сохранение...';
+    confirmButton.disabled = true;
+
     try {
         await apiFetch('/api/update-email', { method: 'POST', body: JSON.stringify({ email: newEmail }) });
+        
+        // Обновляем email в локальном состоянии
+        appState.userData.user.email = newEmail;
+
         tg.HapticFeedback.notificationOccurred('success');
-        tg.showAlert('Email успешно обновлен! Обновляем страницу...', () => location.reload());
-    } catch (error) { tg.showAlert(`❌ Ошибка: ${error.message}`); closeModal(); }
+        tg.showAlert('Email успешно обновлен!');
+        
+        closeModal();
+        renderProfilePage(appState.userData); // Перерисовываем профиль с новыми данными
+
+    } catch (error) { 
+        tg.showAlert(`❌ Ошибка: ${error.message}`);
+    } finally {
+        // Возвращаем кнопку в исходное состояние
+        confirmButton.textContent = originalButtonText;
+        confirmButton.disabled = false;
+    }
 }
 function handleResetClick() {
     tg.showConfirm("Вы уверены, что хотите сменить квартиру?", async (ok) => {
