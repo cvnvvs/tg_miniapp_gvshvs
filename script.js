@@ -39,7 +39,12 @@ function initialize() {
     }).catch(() => showPage('register'));
 }
 
-function showPage(pageName) {
+function showPage(pageName, data = null) {
+    // Если переданы свежие данные, обновляем глобальное состояние
+    if (data) {
+        appState.userData = data;
+    }
+
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
     document.getElementById(`${pageName}-container`).classList.add('active');
     tg.MainButton.hide();
@@ -59,7 +64,6 @@ function showPage(pageName) {
         if (pageName === 'register') renderRegistrationStep1();
     }
 }
-
 // --- Регистрация (без изменений, но с полным текстом политики) ---
 function renderRegistrationStep1() {
     hideLoader();
@@ -140,10 +144,10 @@ async function finalSubmit() {
     showLoader();
     try {
         const data = await apiFetch('/api/register', { method: 'POST', body: JSON.stringify(appState.regData) });
-        appState.userData = data.user_data;
         tg.HapticFeedback.notificationOccurred('success');
         tg.showAlert('✅ Регистрация успешно завершена!');
-        showPage('profile');
+        // ИСПРАВЛЕНИЕ: Передаем свежие данные напрямую в showPage
+        showPage('profile', data.user_data); 
     } catch (error) { 
         tg.showAlert(`❌ Ошибка: ${error.message}`);
         showPage('register');
@@ -236,9 +240,10 @@ async function submitSingleReading(meter, value) {
     try {
         const payload = { readings: [{ meter_id: meter.id, value: value }] };
         const data = await apiFetch('/api/submit-readings', { method: 'POST', body: JSON.stringify(payload) });
-        appState.userData = data.user_data;
         tg.HapticFeedback.notificationOccurred('success');
-        showPage('readings');
+        tg.showAlert('✅ Показания сохранены');
+        // ИСПРАВЛЕНИЕ: Передаем свежие данные напрямую в showPage
+        showPage('readings', data.user_data);
     } catch(error) {
         tg.showAlert(`❌ Ошибка: ${error.message}`);
         tg.MainButton.hideProgress().enable();
@@ -290,18 +295,18 @@ async function submitModal() {
     if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { tg.showAlert('Неверный формат Email.'); return; }
     const newEmail = email || null;
     document.getElementById('modal-content').innerHTML = '<div class="loader"></div>';
-    try {
+     try {
         await apiFetch('/api/update-email', { method: 'POST', body: JSON.stringify({ email: newEmail }) });
         const updatedData = await apiFetch('/api/get-profile');
-        appState.userData = updatedData;
+        // ИСПРАВЛЕНИЕ: Передаем свежие данные напрямую в showPage
         tg.HapticFeedback.notificationOccurred('success');
         tg.showAlert('Email успешно обновлен!');
         closeModal();
-        renderProfilePage();
+        showPage('profile', updatedData);
     } catch (error) { tg.showAlert(`❌ Ошибка: ${error.message}`); closeModal(); }
 }
 function handleResetClick() {
-    tg.showConfirm("Вы уверены, что хотите сменить квартиру? Это действие необратимо.", async (ok) => {
+    tg.showConfirm("Вы уверены, что хотите сменить квартиру?", async (ok) => {
         if (!ok) return;
         showLoader();
         try {
@@ -312,7 +317,6 @@ function handleResetClick() {
         } catch (error) { tg.showAlert(`❌ Ошибка: ${error.message}`); }
     });
 }
-
 // --- Вспомогательные функции ---
 function setHeader(t, a) { document.getElementById('header-title').textContent = t; document.getElementById('header-address').textContent = a; }
 function showLoader() { document.querySelectorAll('.page').forEach(p => p.classList.remove('active')); document.getElementById('loader-container').classList.add('active'); tg.MainButton.hide(); }
