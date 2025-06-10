@@ -39,8 +39,8 @@ function initialize() {
     }).catch(() => showPage('register'));
 }
 
+
 function showPage(pageName, data = null) {
-    // Если переданы свежие данные, обновляем глобальное состояние
     if (data) {
         appState.userData = data;
     }
@@ -57,8 +57,9 @@ function showPage(pageName, data = null) {
         const targetTab = document.querySelector(`.tab-button[onclick*="'${pageName}'"]`);
         if (targetTab) targetTab.classList.add('active');
         
-        if (pageName === 'readings') renderReadingsPage();
-        else renderProfilePage();
+        // Передаем данные в функции рендеринга
+        if (pageName === 'readings') renderReadingsPage(appState.userData);
+        else renderProfilePage(appState.userData);
     } else {
         tabBar.classList.add('hidden');
         if (pageName === 'register') renderRegistrationStep1();
@@ -146,8 +147,8 @@ async function finalSubmit() {
         const data = await apiFetch('/api/register', { method: 'POST', body: JSON.stringify(appState.regData) });
         tg.HapticFeedback.notificationOccurred('success');
         tg.showAlert('✅ Регистрация успешно завершена!');
-        // ИСПРАВЛЕНИЕ: Передаем свежие данные напрямую в showPage
-        showPage('profile', data.user_data); 
+        // ИСПРАВЛЕНИЕ: Явно передаем свежие данные на отрисовку
+        showPage('profile', data.user_data);
     } catch (error) { 
         tg.showAlert(`❌ Ошибка: ${error.message}`);
         showPage('register');
@@ -155,9 +156,8 @@ async function finalSubmit() {
 }
 
 // --- Передача показаний ---
-function renderReadingsPage() {
+function renderReadingsPage(data) {
     hideLoader();
-    const data = appState.userData;
     if (!data) { handleError("Не удалось загрузить данные пользователя."); return; }
     
     const metersContainer = document.getElementById('readings-container');
@@ -173,16 +173,12 @@ function renderReadingsPage() {
             const buttonClass = isSubmitted ? 'meter-button submitted' : 'meter-button';
             const checkmarkHTML = isSubmitted ? '<span class="checkmark">✅</span>' : '';
             const icon = meter.meter_type === 'ГВС' ? '🔥' : '❄️';
-            
-            metersHTML += `
-                <button class="${buttonClass}" onclick="renderSingleReadingInput(${meter.id})">
-                    <span class="meter-button-icon">${icon}</span>
-                    <div class="meter-button-text">
-                        <span class="meter-button-type">${meter.meter_type}</span>
-                        <span class="meter-button-num">№ ${meter.factory_number}</span>
-                    </div>
-                    ${checkmarkHTML}
-                </button>`;
+            metersHTML += `<button class="${buttonClass}" onclick="renderSingleReadingInput(${meter.id})">
+                <span class="meter-button-icon">${icon}</span>
+                <div class="meter-button-text">
+                    <span class="meter-button-type">${meter.meter_type}</span>
+                    <span class="meter-button-num">№ ${meter.factory_number}</span>
+                </div>${checkmarkHTML}</button>`;
         });
     }
     metersHTML += '</div>';
@@ -295,13 +291,13 @@ async function submitModal() {
     if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { tg.showAlert('Неверный формат Email.'); return; }
     const newEmail = email || null;
     document.getElementById('modal-content').innerHTML = '<div class="loader"></div>';
-     try {
+    try {
         await apiFetch('/api/update-email', { method: 'POST', body: JSON.stringify({ email: newEmail }) });
         const updatedData = await apiFetch('/api/get-profile');
-        // ИСПРАВЛЕНИЕ: Передаем свежие данные напрямую в showPage
         tg.HapticFeedback.notificationOccurred('success');
         tg.showAlert('Email успешно обновлен!');
         closeModal();
+        // ИСПРАВЛЕНИЕ: Явно передаем свежие данные на отрисовку
         showPage('profile', updatedData);
     } catch (error) { tg.showAlert(`❌ Ошибка: ${error.message}`); closeModal(); }
 }
