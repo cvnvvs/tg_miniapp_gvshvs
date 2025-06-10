@@ -136,17 +136,23 @@ function handlePolicyDecline() {
 }
 async function finalSubmit() {
     tg.BackButton.hide().offClick();
-    showLoader();
+    tg.MainButton.showProgress().disable();
     try {
-        await apiFetch('/api/register', { method: 'POST', body: JSON.stringify(appState.regData) });
+        // Мы НЕ проверяем подписку на фронте. Это делает бэкенд.
+        const data = await apiFetch('/api/register', { method: 'POST', body: JSON.stringify(appState.regData) });
+        
         tg.HapticFeedback.notificationOccurred('success');
         tg.showAlert('✅ Регистрация успешно завершена! Приложение будет перезагружено.', () => location.reload());
+
     } catch (error) { 
+        // ИСПРАВЛЕНИЕ: Показываем любую ошибку, пришедшую с бэкенда
         tg.showAlert(`❌ Ошибка: ${error.message}`);
-        showPage('register');
+        // Возвращаем пользователя на предыдущий шаг (кнопки "Согласен/Не согласен"), чтобы он мог попробовать снова
+        renderPolicyStep(); 
+    } finally { 
+        tg.MainButton.hideProgress().enable(); 
     }
 }
-
 // --- Передача показаний ---
 function renderReadingsPage(data) {
     hideLoader();
