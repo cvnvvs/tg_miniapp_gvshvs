@@ -3,8 +3,7 @@ const API_BASE_URL = 'https://bunny-brave-externally.ngrok-free.app';
 
 const tg = window.Telegram.WebApp;
 
-// Глобальное состояние теперь используется только для временных данных регистрации
-let regData = {};
+let appState = { userData: null, regData: {} };
 
 async function apiFetch(endpoint, options = {}) {
     const isPrivate = options.private !== false;
@@ -19,7 +18,9 @@ async function apiFetch(endpoint, options = {}) {
         if (response.ok) return response.status === 204 ? null : response.json();
         const errorData = await response.json();
         throw new Error(errorData.detail || 'Ошибка сервера.');
-    } catch (e) { throw new Error(e.message || 'Ошибка сети.'); }
+    } catch (e) {
+        throw new Error(e.message || 'Ошибка сети.');
+    }
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -32,13 +33,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
 function initialize() {
     showLoader();
-    // Мы всегда запрашиваем актуальные данные с сервера
-    apiFetch('/api/get-profile')
-        .then(data => showPage('profile', data)) // Если успешно, показываем профиль
-        .catch(() => showPage('register')); // Если ошибка (403), показываем регистрацию
+    apiFetch('/api/get-profile').then(data => {
+        appState.userData = data;
+        showPage('profile');
+    }).catch(() => showPage('register'));
 }
 
-function showPage(pageName, data) {
+function showPage(pageName) {
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
     document.getElementById(`${pageName}-container`).classList.add('active');
     tg.MainButton.hide();
@@ -51,8 +52,8 @@ function showPage(pageName, data) {
         const targetTab = document.querySelector(`.tab-button[onclick*="'${pageName}'"]`);
         if (targetTab) targetTab.classList.add('active');
         
-        if (pageName === 'readings') renderReadingsPage(data);
-        else renderProfilePage(data);
+        if (pageName === 'readings') renderReadingsPage(appState.userData);
+        else renderProfilePage(appState.userData);
     } else {
         tabBar.classList.add('hidden');
         if (pageName === 'register') renderRegistrationStep1();
@@ -69,7 +70,7 @@ function renderRegistrationStep1() {
         <button class="grid-button" onclick="handleBuildingSelect('8Д')">8Д</button></div></div>`;
 }
 function handleBuildingSelect(building) {
-    regData.building = building;
+    appState.regData.building = building;
     setHeader('Регистрация', `Шаг 2: Номер квартиры`);
     document.getElementById('register-container').innerHTML = `<div class="form-step"><p>Строение <b>${building}</b>. Введите номер квартиры:</p><input type="number" id="apartment-input" placeholder="45" inputmode="numeric"></div>`;
     tg.MainButton.setText('Далее').show().onClick(handleApartmentSubmit);
@@ -77,10 +78,10 @@ function handleBuildingSelect(building) {
 async function handleApartmentSubmit() {
     const apartment = document.getElementById('apartment-input').value.trim();
     if (!apartment || !/^\d+$/.test(apartment)) { tg.showAlert('Введите корректный номер квартиры.'); return; }
-    regData.apartment = apartment;
+    appState.regData.apartment = apartment;
     tg.MainButton.showProgress().disable();
     try {
-        await apiFetch('/api/check-address', { method: 'POST', body: JSON.stringify(regData), private: false });
+        await apiFetch('/api/check-address', { method: 'POST', body: JSON.stringify(appState.regData), private: false });
         renderAccountStep();
     } catch (error) { tg.showAlert(error.message);
     } finally { tg.MainButton.hideProgress().enable(); }
@@ -88,13 +89,13 @@ async function handleApartmentSubmit() {
 function renderAccountStep() {
     setHeader('Регистрация', 'Шаг 3: Верификация');
     document.getElementById('register-container').innerHTML = `<div class="form-step"><p>Адрес найден! Введите ваш <b>6-значный лицевой счет</b>.</p><input type="number" id="account-input" placeholder="000000" maxlength="6" inputmode="numeric"></div>`;
-    tg.BackButton.show().onClick(handleBuildingSelect.bind(null, regData.building));
+    tg.BackButton.show().onClick(handleBuildingSelect.bind(null, appState.regData.building));
     tg.MainButton.offClick(handleApartmentSubmit).onClick(handleAccountSubmit);
 }
 function handleAccountSubmit() {
     const account = document.getElementById('account-input').value.trim();
     if (!account || !/^\d{6}$/.test(account)) { tg.showAlert('Лицевой счет должен состоять из 6 цифр.'); return; }
-    regData.account = account;
+    appState.regData.account = account;
     renderEmailStep();
 }
 function renderEmailStep() {
@@ -108,10 +109,10 @@ function renderEmailStep() {
 function handleEmailSubmit(isSkipped) {
     const emailInput = document.getElementById('email-input');
     const email = emailInput ? emailInput.value.trim() : '';
-    if (isSkipped) regData.email = null;
-    else {
+    if (isSkipped) { appState.regData.email = null;
+    } else {
         if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { tg.showAlert('Неверный формат Email.'); return; }
-        regData.email = email;
+        appState.regData.email = email;
     }
     renderPolicyStep();
 }
@@ -135,14 +136,13 @@ function handlePolicyDecline() {
 }
 async function finalSubmit() {
     tg.BackButton.hide().offClick();
-    tg.MainButton.showProgress().disable();
+    showLoader();
     try {
-        await apiFetch('/api/register', { method: 'POST', body: JSON.stringify(regData) });
+        await apiFetch('/api/register', { method: 'POST', body: JSON.stringify(appState.regData) });
         tg.HapticFeedback.notificationOccurred('success');
         tg.showAlert('✅ Регистрация успешно завершена! Приложение будет перезагружено.', () => location.reload());
     } catch (error) { 
         tg.showAlert(`❌ Ошибка: ${error.message}`);
-        tg.MainButton.hideProgress().enable();
         showPage('register');
     }
 }
@@ -154,15 +154,22 @@ function renderReadingsPage(data) {
     const metersContainer = document.getElementById('readings-container');
     setHeader('Передача показаний', `ул. Вахова, д. ${data.address.building}, кв. ${data.address.apartment}`);
     let metersHTML = '<div class="meters-grid">';
-    if (data.meters.length === 0) metersHTML = '<p>Счетчики не найдены.</p>';
-    else {
+    if (data.meters.length === 0) {
+        metersHTML = '<p>Счетчики не найдены.</p>';
+    } else {
         const sortedMeters = data.meters.sort((a, b) => a.meter_type.localeCompare(b.meter_type) || a.id - b.id);
         sortedMeters.forEach(meter => {
             const isSubmitted = meter.current_reading !== null;
             const buttonClass = isSubmitted ? 'meter-button submitted' : 'meter-button';
             const checkmarkHTML = isSubmitted ? '<span class="checkmark">✅</span>' : '';
             const icon = meter.meter_type === 'ГВС' ? '🔥' : '❄️';
-            metersHTML += `<button class="${buttonClass}" onclick="renderSingleReadingInput(${meter.id})">${icon}<div class="meter-button-text">...</div>${checkmarkHTML}</button>`;
+            metersHTML += `<button class="${buttonClass}" onclick="renderSingleReadingInput(${meter.id})">
+                <span class="meter-button-icon">${icon}</span>
+                <div class="meter-button-text">
+                    <span class="meter-button-type">${meter.meter_type}</span>
+                    <span class="meter-button-num">№ ${meter.factory_number}</span>
+                </div>
+                ${checkmarkHTML}</button>`;
         });
     }
     metersHTML += '</div>';
@@ -172,16 +179,12 @@ function renderSingleReadingInput(meterId) {
     document.getElementById('tab-bar').classList.add('hidden');
     const meter = appState.userData.meters.find(m => m.id === meterId);
     if (!meter) { handleError("Счетчик не найден"); return; }
-    
-    tg.BackButton.show().onClick(() => showPage('readings'));
+    tg.BackButton.show().onClick(() => showPage('readings', appState.userData));
     setHeader('Ввод показаний', `${meter.meter_type} - № ${meter.factory_number}`);
     const container = document.getElementById('readings-container');
-
     const lastReadingStr = meter.last_reading.toFixed(3).replace('.', ',');
     const [currentInt, currentDec] = meter.current_reading ? meter.current_reading.toFixed(3).split('.') : ['', ''];
-    
-    container.innerHTML = `<div class="form-step">
-        <p>Показания за прошлый месяц: <code>${lastReadingStr}</code></p>
+    container.innerHTML = `<div class="form-step"><p>Показания за прошлый месяц: <code>${lastReadingStr}</code></p>
         <p>Введите текущие показания:</p>
         <div class="readings-input-wrapper">
             <input type="number" id="reading-part1" class="readings-input-part" maxlength="5" placeholder="00000" value="${currentInt}" oninput="limitLength(this, 5); updateLiveInput();">
@@ -189,8 +192,7 @@ function renderSingleReadingInput(meterId) {
             <input type="number" id="reading-part2" class="readings-input-part" maxlength="3" placeholder="000" value="${currentDec}" oninput="limitLength(this, 3); updateLiveInput();">
         </div>
         <div class="consumption-info" id="consumption-live"></div>
-        <p id="anomaly-warning" class="hidden" style="color: #ff8800; font-weight: bold;"></p>
-    </div>`;
+        <p id="anomaly-warning" class="hidden" style="color: #ff8800; font-weight: bold;"></p></div>`;
     
     window.updateLiveInput = () => {
         const p1 = document.getElementById('reading-part1').value;
@@ -198,9 +200,10 @@ function renderSingleReadingInput(meterId) {
         if (p1 && p2.length === 3) {
             const fullValue = parseFloat(`${p1}.${p2}`);
             if (isNaN(fullValue)) return;
-            document.getElementById('consumption-live').textContent = `Расход: ${(fullValue - meter.last_reading).toFixed(3).replace('.',',')} м³`;
+            const consumption = fullValue - meter.last_reading;
+            document.getElementById('consumption-live').textContent = `Расход: ${consumption.toFixed(3).replace('.',',')} м³`;
             const warning = document.getElementById('anomaly-warning');
-            if (Math.abs(fullValue - meter.last_reading) > 500) {
+            if (Math.abs(consumption) > 500) {
                 warning.textContent = 'ВНИМАНИЕ, БОЛЬШАЯ РАЗНИЦА В ПОКАЗАНИЯХ!';
                 warning.classList.remove('hidden');
             } else { warning.classList.add('hidden'); }
@@ -233,7 +236,6 @@ async function submitSingleReading(meter, value) {
 function renderProfilePage(data) {
     hideLoader();
     if (!data) { handleError("Не удалось загрузить данные пользователя."); return; }
-    const profileContainer = document.getElementById('profile-container');
     
     const profileContainer = document.getElementById('profile-container');
     setHeader('Профиль', `ул. Вахова, д. ${data.address.building}, кв. ${data.address.apartment}`);
@@ -268,7 +270,7 @@ function openEmailModal() {
     document.getElementById('modal-overlay').classList.remove('hidden');
 }
 function closeModal() { document.getElementById('modal-overlay').classList.add('hidden'); }
-async function submitModal() { // Смена email
+async function submitModal() {
     const email = document.getElementById('modal-input').value.trim();
     if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { tg.showAlert('Неверный формат Email.'); return; }
     const newEmail = email || null;
@@ -279,7 +281,7 @@ async function submitModal() { // Смена email
         tg.showAlert('Email успешно обновлен! Обновляем страницу...', () => location.reload());
     } catch (error) { tg.showAlert(`❌ Ошибка: ${error.message}`); closeModal(); }
 }
-function handleResetClick() { // Сброс регистрации
+function handleResetClick() {
     tg.showConfirm("Вы уверены, что хотите сменить квартиру?", async (ok) => {
         if (!ok) return;
         showLoader();
@@ -290,6 +292,7 @@ function handleResetClick() { // Сброс регистрации
         } catch (error) { tg.showAlert(`❌ Ошибка: ${error.message}`); }
     });
 }
+
 // --- Вспомогательные функции ---
 function setHeader(t, a) { document.getElementById('header-title').textContent = t; document.getElementById('header-address').textContent = a; }
 function showLoader() { document.querySelectorAll('.page').forEach(p => p.classList.remove('active')); document.getElementById('loader-container').classList.add('active'); tg.MainButton.hide(); }
