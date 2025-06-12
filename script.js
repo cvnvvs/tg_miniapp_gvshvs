@@ -1,5 +1,5 @@
 // ВАЖНО: Вставьте сюда ваш актуальный HTTPS URL от ngrok или вашего сервера
-const API_BASE_URL = 'https://fifty-towns-smash.loca.lt'; 
+const API_BASE_URL = 'https://hip-turkeys-shake.loca.lt'; 
 
 const tg = window.Telegram.WebApp;
 
