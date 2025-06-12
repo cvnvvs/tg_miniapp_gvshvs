@@ -1,5 +1,5 @@
 // ВАЖНО: Вставьте сюда ваш актуальный HTTPS URL от ngrok или вашего сервера
-const API_BASE_URL = 'https://i1sc77-185-247-185-62.ru.tuna.am'; 
+const API_BASE_URL = 'https://h8u9sr-185-247-185-62.ru.tuna.am'; 
 
 const tg = window.Telegram.WebApp;
 
