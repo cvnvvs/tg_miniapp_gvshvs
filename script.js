@@ -1,5 +1,5 @@
-// ВАЖНО: Вставьте сюда ваш актуальный HTTPS URL от ngrok
-const API_BASE_URL = 'https://honest-insects-report.loca.lt'; 
+// ВАЖНО: Вставьте сюда ваш актуальный HTTPS URL от ngrok или вашего сервера
+const API_BASE_URL = 'https://fifty-towns-smash.loca.lt'; 
 
 const tg = window.Telegram.WebApp;
 
@@ -96,30 +96,102 @@ function handleAccountSubmit() {
     const account = document.getElementById('account-input').value.trim();
     if (!account || !/^\d{6}$/.test(account)) { tg.showAlert('Лицевой счет должен состоять из 6 цифр.'); return; }
     appState.regData.account = account;
-    renderEmailStep();
+    renderContactsStep();
 }
-function renderEmailStep() {
+
+// ### НОВАЯ ФУНКЦИЯ: Маска для телефона ###
+function applyPhoneMask(phoneInput) {
+    phoneInput.addEventListener('input', (e) => {
+        let input = e.target;
+        let value = input.value.replace(/\D/g, ''); // Удаляем все нецифровые символы
+        let formattedValue = '';
+
+        if (!value) {
+            input.value = '';
+            return;
+        }
+
+        // Начинаем форматирование
+        if (value.startsWith('7') || value.startsWith('8')) {
+            value = value.substring(1); // Убираем первую 7 или 8
+        }
+
+        formattedValue = '+7 (';
+
+        if (value.length > 0) {
+            formattedValue += value.substring(0, 3);
+        }
+        if (value.length >= 4) {
+            formattedValue += ') ' + value.substring(3, 6);
+        }
+        if (value.length >= 7) {
+            formattedValue += '-' + value.substring(6, 8);
+        }
+        if (value.length >= 9) {
+            formattedValue += '-' + value.substring(8, 10);
+        }
+        
+        input.value = formattedValue;
+    });
+}
+
+// ### ИЗМЕНЕНИЕ: Шаг ввода контактов (Email и Телефон) ###
+function renderContactsStep() {
     setHeader('Регистрация', 'Шаг 4: Контакты (необязательно)');
-    document.getElementById('register-container').innerHTML = `<div class="form-step"><p>Email:</p><input type="email" id="email-input" placeholder="user@example.com" inputmode="email">
+    document.getElementById('register-container').innerHTML = `<div class="form-step">
+        <p>Email:</p>
+        <input type="email" id="email-input" placeholder="user@example.com" inputmode="email" style="margin-bottom: 15px;">
+        
+        <p>Номер телефона:</p>
+        <input type="tel" id="phone-input" placeholder="+7 (___) ___-__-__" inputmode="tel">
+
         <div class="button-grid" style="margin-top: 20px;">
-        <button class="grid-button" onclick="handleEmailSubmit(true)">Пропустить</button></div></div>`;
-    tg.MainButton.setText('Подтвердить Email и далее').offClick(handleAccountSubmit).onClick(() => handleEmailSubmit(false));
+        <button class="grid-button" onclick="handleContactsSubmit(true)">Пропустить</button></div></div>`;
+    
+    // Применяем маску к полю ввода телефона
+    applyPhoneMask(document.getElementById('phone-input'));
+
+    tg.MainButton.setText('Подтвердить и далее').offClick(handleAccountSubmit).onClick(() => handleContactsSubmit(false));
     tg.BackButton.show().onClick(renderAccountStep);
 }
-function handleEmailSubmit(isSkipped) {
-    const emailInput = document.getElementById('email-input');
-    const email = emailInput ? emailInput.value.trim() : '';
-    if (isSkipped) { appState.regData.email = null;
-    } else {
-        if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { tg.showAlert('Неверный формат Email.'); return; }
-        appState.regData.email = email;
+
+// ### ИЗМЕНЕНИЕ: Обработка обоих полей (Email и Телефон) ###
+function handleContactsSubmit(isSkipped) {
+    if (isSkipped) {
+        appState.regData.email = null;
+        appState.regData.phone = null;
+        renderPolicyStep();
+        return;
     }
+
+    const emailInput = document.getElementById('email-input');
+    const phoneInput = document.getElementById('phone-input');
+    
+    const email = emailInput.value.trim();
+    const phone = phoneInput.value.trim();
+    const phoneDigits = phone.replace(/\D/g, '');
+
+    // Валидация Email (если введен)
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        tg.showAlert('Неверный формат Email.');
+        return;
+    }
+    appState.regData.email = email || null;
+
+    // Валидация телефона (если введен)
+    if (phone && phoneDigits.length !== 11) { // Проверяем, что введено 11 цифр (включая 7)
+        tg.showAlert('Номер телефона должен быть введен полностью.');
+        return;
+    }
+    appState.regData.phone = phone || null;
+    
     renderPolicyStep();
 }
+
 function renderPolicyStep() {
     setHeader('Регистрация', 'Финальный шаг: Согласие');
     tg.MainButton.hide();
-    tg.BackButton.show().onClick(renderEmailStep);
+    tg.BackButton.show().onClick(renderContactsStep); // Назад на шаг контактов
     const user = tg.initDataUnsafe.user;
     const userLogin = user.username ? `@${user.username}` : `ID: ${user.id}`;
     const fullAddress = `Хабаровский край, г.Хабаровск, ул. Вахова, д. ${appState.regData.building}, кв. ${appState.regData.apartment}`;
@@ -138,16 +210,13 @@ async function finalSubmit() {
     tg.BackButton.hide().offClick();
     tg.MainButton.showProgress().disable();
     try {
-        // Мы НЕ проверяем подписку на фронте. Это делает бэкенд.
         const data = await apiFetch('/api/register', { method: 'POST', body: JSON.stringify(appState.regData) });
         
         tg.HapticFeedback.notificationOccurred('success');
         tg.showAlert('✅ Регистрация успешно завершена! Приложение будет перезагружено.', () => location.reload());
 
     } catch (error) { 
-        // ИСПРАВЛЕНИЕ: Показываем любую ошибку, пришедшую с бэкенда
         tg.showAlert(`❌ Ошибка: ${error.message}`);
-        // Возвращаем пользователя на предыдущий шаг (кнопки "Согласен/Не согласен"), чтобы он мог попробовать снова
         renderPolicyStep(); 
     } finally { 
         tg.MainButton.hideProgress().enable(); 
@@ -161,7 +230,6 @@ function renderReadingsPage(data) {
     const metersContainer = document.getElementById('readings-container');
     setHeader('Передача показаний', `ул. Вахова, д. ${data.address.building}, кв. ${data.address.apartment}`);
     
-    // ИСПРАВЛЕНИЕ: Проверяем флаг с бэкенда
     if (!data.is_active_period) {
         metersContainer.innerHTML = `<div class="form-step"><p>📅 Прием показаний закрыт.<br>Доступно только с 20 по 25 число месяца.</p></div>`;
         tg.MainButton.hide();
@@ -203,7 +271,7 @@ function renderSingleReadingInput(meterId) {
     const container = document.getElementById('readings-container');
     const lastReadingStr = meter.last_reading.toFixed(3).replace('.', ',');
     const [currentInt, currentDec] = meter.current_reading ? meter.current_reading.toFixed(3).split('.') : ['', ''];
-    container.innerHTML = `<div class="form-step"><p>Показания за прошлый месяц: <code>${lastReadingStr}</code></p>
+    container.innerHTML = `<div class="form-step"><p>Показания за прошлый месяц: code>${lastReadingStr}</code></p>
         <p>Введите текущие показания:</p>
         <div class="readings-input-wrapper">
             <input type="number" id="reading-part1" class="readings-input-part" maxlength="5" placeholder="00000" value="${currentInt}" oninput="limitLength(this, 5); updateLiveInput();">
@@ -259,10 +327,12 @@ function renderProfilePage(data) {
     const profileContainer = document.getElementById('profile-container');
     setHeader('Профиль', `ул. Вахова, д. ${data.address.building}, кв. ${data.address.apartment}`);
     const emailText = data.user.email || 'не указан';
+    const phoneText = data.user.phone || 'не указан'; // ### ИЗМЕНЕНИЕ: Отображаем телефон ###
     const emailButtonText = data.user.email ? 'Изменить Email' : 'Добавить Email';
     let profileHTML = `<div class="profile-section">
             <p><strong>Логин:</strong> ${data.user.login}</p>
             <p><strong>Email:</strong> ${emailText}</p>
+            <p><strong>Телефон:</strong> ${phoneText}</p> 
             <p><strong>Лицевой счет:</strong> <code>${data.address.account_number}</code></p>
         </div><div class="history-section"><h3>📜 Информация по счетчикам</h3>`;
     if (data.meters.length > 0) {
@@ -298,7 +368,6 @@ async function submitModal() {
         return;
     }
 
-    // Показываем индикатор загрузки на кнопке, а не стираем контент
     const confirmButton = document.querySelector('.modal-button-confirm');
     const originalButtonText = confirmButton.textContent;
     confirmButton.textContent = 'Сохранение...';
@@ -307,19 +376,17 @@ async function submitModal() {
     try {
         await apiFetch('/api/update-email', { method: 'POST', body: JSON.stringify({ email: newEmail }) });
         
-        // Обновляем email в локальном состоянии
         appState.userData.user.email = newEmail;
 
         tg.HapticFeedback.notificationOccurred('success');
         tg.showAlert('Email успешно обновлен!');
         
         closeModal();
-        renderProfilePage(appState.userData); // Перерисовываем профиль с новыми данными
+        renderProfilePage(appState.userData);
 
     } catch (error) { 
         tg.showAlert(`❌ Ошибка: ${error.message}`);
     } finally {
-        // Возвращаем кнопку в исходное состояние
         confirmButton.textContent = originalButtonText;
         confirmButton.disabled = false;
     }
