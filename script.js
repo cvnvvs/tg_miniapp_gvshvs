@@ -1,5 +1,5 @@
 // ВАЖНО: Вставьте сюда ваш актуальный HTTPS URL от ngrok или вашего сервера
-const API_BASE_URL = 'https://evil-llamas-smile.loca.lt'; 
+const API_BASE_URL = 'https://frnokf-185-247-185-62.ru.tuna.am'; 
 
 const tg = window.Telegram.WebApp;
 
