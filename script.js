@@ -7,7 +7,7 @@ let appState = { userData: null, regData: {} };
 
 async function apiFetch(endpoint, options = {}) {
     const isPrivate = options.private !== false;
-    const headers = { 'Content-Type': 'application/json', 'tuna-skip-browser-warning ': 'true' };
+    const headers = { 'Content-Type': 'application/json', 'tuna-skip-browser-warning': 'true' };
     if (isPrivate) {
         if (!tg.initData) throw new Error("Нет данных для авторизации.");
         headers['Authorization'] = `tma ${tg.initData}`;
