@@ -1,5 +1,5 @@
 // ВАЖНО: Вставьте сюда ваш актуальный HTTPS URL от ngrok или вашего сервера
-const API_BASE_URL = 'https://cvnvvs.ru'; 
+const API_BASE_URL = 'http://cvnvvs.ru'; 
 
 const tg = window.Telegram.WebApp;
 
