@@ -1,5 +1,5 @@
 // ВАЖНО: Вставьте сюда ваш актуальный HTTPS URL от ngrok или вашего сервера
-const API_BASE_URL = 'https://thin-papers-tickle.loca.lt'; 
+const API_BASE_URL = 'https://upset-cases-visit.loca.lt'; 
 
 const tg = window.Telegram.WebApp;
 
