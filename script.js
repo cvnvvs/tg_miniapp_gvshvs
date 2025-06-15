@@ -1,5 +1,5 @@
 // ВАЖНО: Вставьте сюда ваш актуальный HTTPS URL от ngrok или вашего сервера
-const API_BASE_URL = 'https://upset-cases-visit.loca.lt'; 
+const API_BASE_URL = 'https://cvnvvs.ru'; 
 
 const tg = window.Telegram.WebApp;
 
