@@ -271,7 +271,7 @@ function renderSingleReadingInput(meterId) {
     const container = document.getElementById('readings-container');
     const lastReadingStr = meter.last_reading.toFixed(3).replace('.', ',');
     const [currentInt, currentDec] = meter.current_reading ? meter.current_reading.toFixed(3).split('.') : ['', ''];
-    container.innerHTML = `<div class="form-step"><p>Показания за прошлый месяц: code>${lastReadingStr}</code></p>
+    container.innerHTML = `<div class="form-step"><p>Показания за прошлый месяц: <code>${lastReadingStr}</code></p>
         <p>Введите текущие показания:</p>
         <div class="readings-input-wrapper">
             <input type="number" id="reading-part1" class="readings-input-part" maxlength="5" placeholder="00000" value="${currentInt}" oninput="limitLength(this, 5); updateLiveInput();">
