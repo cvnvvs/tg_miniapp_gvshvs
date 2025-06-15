@@ -1,5 +1,5 @@
 // ВАЖНО: Вставьте сюда ваш актуальный HTTPS URL от ngrok или вашего сервера
-const API_BASE_URL = 'https://bunny-brave-externally.ngrok-free.app'; 
+const API_BASE_URL = 'https://thin-papers-tickle.loca.lt'; 
 
 const tg = window.Telegram.WebApp;
 
@@ -7,7 +7,7 @@ let appState = { userData: null, regData: {} };
 
 async function apiFetch(endpoint, options = {}) {
     const isPrivate = options.private !== false;
-    const headers = { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' };
+    const headers = { 'Content-Type': 'application/json', 'bypass-tunnel-reminder': 'true' };
     if (isPrivate) {
         if (!tg.initData) throw new Error("Нет данных для авторизации.");
         headers['Authorization'] = `tma ${tg.initData}`;
