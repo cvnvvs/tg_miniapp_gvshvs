@@ -1,4 +1,3 @@
-// ВАЖНО: Вставьте сюда ваш актуальный HTTPS URL от ngrok или вашего сервера
 const API_BASE_URL = 'https://cvnvvs.ru'; 
 
 const tg = window.Telegram.WebApp;
@@ -42,19 +41,23 @@ function initialize() {
 function showPage(pageName) {
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
     document.getElementById(`${pageName}-container`).classList.add('active');
+
     tg.MainButton.hide();
     tg.BackButton.hide();
+
     const tabBar = document.getElementById('tab-bar');
 
     if (pageName === 'readings' || pageName === 'profile') {
         tabBar.classList.remove('hidden');
         document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
+
         const targetTab = document.querySelector(`.tab-button[onclick*="'${pageName}'"]`);
+
         if (targetTab) targetTab.classList.add('active');
-        
         if (pageName === 'readings') renderReadingsPage(appState.userData);
         else renderProfilePage(appState.userData);
-    } else {
+    } 
+    else {
         tabBar.classList.add('hidden');
         if (pageName === 'register') renderRegistrationStep1();
     }
@@ -69,12 +72,14 @@ function renderRegistrationStep1() {
         <button class="grid-button" onclick="handleBuildingSelect('8Г')">8Г</button>
         <button class="grid-button" onclick="handleBuildingSelect('8Д')">8Д</button></div></div>`;
 }
+
 function handleBuildingSelect(building) {
     appState.regData.building = building;
     setHeader('Регистрация', `Шаг 2: Номер квартиры`);
     document.getElementById('register-container').innerHTML = `<div class="form-step"><p>Строение <b>${building}</b>. Введите номер квартиры:</p><input type="number" id="apartment-input" placeholder="45" inputmode="numeric"></div>`;
     tg.MainButton.setText('Далее').show().onClick(handleApartmentSubmit);
 }
+
 async function handleApartmentSubmit() {
     const apartment = document.getElementById('apartment-input').value.trim();
     if (!apartment || !/^\d+$/.test(apartment)) { tg.showAlert('Введите корректный номер квартиры.'); return; }
@@ -86,12 +91,14 @@ async function handleApartmentSubmit() {
     } catch (error) { tg.showAlert(error.message);
     } finally { tg.MainButton.hideProgress().enable(); }
 }
+
 function renderAccountStep() {
     setHeader('Регистрация', 'Шаг 3: Верификация');
     document.getElementById('register-container').innerHTML = `<div class="form-step"><p>Адрес найден! Введите ваш <b>6-значный лицевой счет</b>.</p><input type="number" id="account-input" placeholder="000000" maxlength="6" inputmode="numeric"></div>`;
     tg.BackButton.show().onClick(handleBuildingSelect.bind(null, appState.regData.building));
     tg.MainButton.offClick(handleApartmentSubmit).onClick(handleAccountSubmit);
 }
+
 function handleAccountSubmit() {
     const account = document.getElementById('account-input').value.trim();
     if (!account || !/^\d{6}$/.test(account)) { tg.showAlert('Лицевой счет должен состоять из 6 цифр.'); return; }
@@ -99,7 +106,7 @@ function handleAccountSubmit() {
     renderContactsStep();
 }
 
-// ### НОВАЯ ФУНКЦИЯ: Маска для телефона ###
+
 function applyPhoneMask(phoneInput) {
     phoneInput.addEventListener('input', (e) => {
         let input = e.target;
@@ -111,7 +118,6 @@ function applyPhoneMask(phoneInput) {
             return;
         }
 
-        // Начинаем форматирование
         if (value.startsWith('7') || value.startsWith('8')) {
             value = value.substring(1); // Убираем первую 7 или 8
         }
@@ -135,9 +141,9 @@ function applyPhoneMask(phoneInput) {
     });
 }
 
-// ### ИЗМЕНЕНИЕ: Шаг ввода контактов (Email и Телефон) ###
 function renderContactsStep() {
     setHeader('Регистрация', 'Шаг 4: Контакты (необязательно)');
+
     document.getElementById('register-container').innerHTML = `<div class="form-step">
         <p>Email:</p>
         <input type="email" id="email-input" placeholder="user@example.com" inputmode="email" style="margin-bottom: 15px;">
@@ -148,14 +154,12 @@ function renderContactsStep() {
         <div class="button-grid" style="margin-top: 20px;">
         <button class="grid-button" onclick="handleContactsSubmit(true)">Пропустить</button></div></div>`;
     
-    // Применяем маску к полю ввода телефона
     applyPhoneMask(document.getElementById('phone-input'));
 
     tg.MainButton.setText('Подтвердить и далее').offClick(handleAccountSubmit).onClick(() => handleContactsSubmit(false));
     tg.BackButton.show().onClick(renderAccountStep);
 }
 
-// ### ИЗМЕНЕНИЕ: Обработка обоих полей (Email и Телефон) ###
 function handleContactsSubmit(isSkipped) {
     if (isSkipped) {
         appState.regData.email = null;
@@ -179,7 +183,7 @@ function handleContactsSubmit(isSkipped) {
     appState.regData.email = email || null;
 
     // Валидация телефона (если введен)
-    if (phone && phoneDigits.length !== 11) { // Проверяем, что введено 11 цифр (включая 7)
+    if (phone && phoneDigits.length !== 11) {
         tg.showAlert('Номер телефона должен быть введен полностью.');
         return;
     }
@@ -190,11 +194,14 @@ function handleContactsSubmit(isSkipped) {
 
 function renderPolicyStep() {
     setHeader('Регистрация', 'Финальный шаг: Согласие');
+
     tg.MainButton.hide();
-    tg.BackButton.show().onClick(renderContactsStep); // Назад на шаг контактов
+    tg.BackButton.show().onClick(renderContactsStep); 
+
     const user = tg.initDataUnsafe.user;
     const userLogin = user.username ? `@${user.username}` : `ID: ${user.id}`;
     const fullAddress = `Хабаровский край, г.Хабаровск, ул. Вахова, д. ${appState.regData.building}, кв. ${appState.regData.apartment}`;
+
     const policyText = `Я, ${userLogin}, являясь потребителем жилищно-коммунальных услуг по адресу: ${fullAddress}, прошу осуществить мою авторизацию в телеграм приложении «ГВС ХВС» с целью дачи показаний по счётчикам ГВС и ХВС.<br><br>Даю согласие на предоставление и обработку персональных данных Оператору по ведению взаиморасчетов в соответствии с Федеральным законом от 27.07.2006г. № 152-ФЗ «О персональных данных».<br><br><b>Перечень персональных данных, на обработку которых дается согласие:</b><br>- Лицевой счет;<br>- Адрес;<br>- Номер контактного телефона и/или адрес электронной почты.<br><br><b>Целью обработки персональных данных</b> Оператором является надлежащее осуществление дачи показаний и оказание информационных услуг.<br><br>Согласие на обработку персональных данных выдается Оператору бессрочно, но может быть отозвано посредством письменного уведомления в Абонентный отдел. Потребитель подтверждает, что персональные данные могут быть получены Оператором от любых третьих лиц. Оператор не несет ответственность за достоверность персональных данных Потребителя, полученных от третьих лиц.`;
     document.getElementById('register-container').innerHTML = `<div class="form-step"><div style="text-align: left; font-size: 14px; max-height: 300px; overflow-y: auto; padding-right: 10px; margin-bottom: 20px;">${policyText}</div>
         <div class="button-grid" style="gap: 15px;">
@@ -239,7 +246,8 @@ function renderReadingsPage(data) {
     let metersHTML = '<div class="meters-grid">';
     if (data.meters.length === 0) {
         metersHTML = '<p>Счетчики не найдены.</p>';
-    } else {
+    } 
+    else {
         const sortedMeters = data.meters.sort((a, b) => a.meter_type.localeCompare(b.meter_type) || a.id - b.id);
         sortedMeters.forEach(meter => {
             const isSubmitted = meter.current_reading !== null;
@@ -265,12 +273,17 @@ function renderReadingsPage(data) {
 function renderSingleReadingInput(meterId) {
     document.getElementById('tab-bar').classList.add('hidden');
     const meter = appState.userData.meters.find(m => m.id === meterId);
+
     if (!meter) { handleError("Счетчик не найден"); return; }
+
     tg.BackButton.show().onClick(() => showPage('readings', appState.userData));
+
     setHeader('Ввод показаний', `${meter.meter_type} - № ${meter.factory_number}`);
+
     const container = document.getElementById('readings-container');
     const lastReadingStr = meter.last_reading.toFixed(3).replace('.', ',');
     const [currentInt, currentDec] = meter.current_reading ? meter.current_reading.toFixed(3).split('.') : ['', ''];
+
     container.innerHTML = `<div class="form-step"><p>Показания за прошлый месяц: <code>${lastReadingStr}</code></p>
         <p>Введите текущие показания:</p>
         <div class="readings-input-wrapper">
@@ -284,18 +297,23 @@ function renderSingleReadingInput(meterId) {
     window.updateLiveInput = () => {
         const p1 = document.getElementById('reading-part1').value;
         const p2 = document.getElementById('reading-part2').value;
+
         if (p1 && p2.length === 3) {
             const fullValue = parseFloat(`${p1}.${p2}`);
+
             if (isNaN(fullValue)) return;
             const consumption = fullValue - meter.last_reading;
             document.getElementById('consumption-live').textContent = `Расход: ${consumption.toFixed(3).replace('.',',')} м³`;
             const warning = document.getElementById('anomaly-warning');
+
             if (Math.abs(consumption) > 500) {
                 warning.textContent = 'ВНИМАНИЕ, БОЛЬШАЯ РАЗНИЦА В ПОКАЗАНИЯХ!';
                 warning.classList.remove('hidden');
-            } else { warning.classList.add('hidden'); }
+            } 
+            else { warning.classList.add('hidden'); }
             tg.MainButton.setText('Сохранить').show().onClick(() => submitSingleReading(meter, fullValue));
-        } else {
+        }
+        else {
             tg.MainButton.hide();
             document.getElementById('consumption-live').textContent = '';
             document.getElementById('anomaly-warning').classList.add('hidden');
@@ -327,19 +345,23 @@ function renderProfilePage(data) {
     const profileContainer = document.getElementById('profile-container');
     setHeader('Профиль', `ул. Вахова, д. ${data.address.building}, кв. ${data.address.apartment}`);
     const emailText = data.user.email || 'не указан';
-    const phoneText = data.user.phone || 'не указан'; // ### ИЗМЕНЕНИЕ: Отображаем телефон ###
+    const phoneText = data.user.phone || 'не указан';
     const emailButtonText = data.user.email ? 'Изменить Email' : 'Добавить Email';
+    const phoneButtonText = data.user.phone ? 'Изменить Телефон' : 'Добавить Телефон';
+
     let profileHTML = `<div class="profile-section">
             <p><strong>Логин:</strong> ${data.user.login}</p>
             <p><strong>Email:</strong> ${emailText}</p>
             <p><strong>Телефон:</strong> ${phoneText}</p> 
             <p><strong>Лицевой счет:</strong> <code>${data.address.account_number}</code></p>
         </div><div class="history-section"><h3>📜 Информация по счетчикам</h3>`;
+
     if (data.meters.length > 0) {
         data.meters.forEach(meter => {
             const lastReadingStr = meter.last_reading.toFixed(3).replace('.', ',');
             const currentReadingStr = meter.current_reading !== null ? `<b>${meter.current_reading.toFixed(3).replace('.', ',')}</b>` : '-';
             const consumption = meter.current_reading !== null ? `${(meter.current_reading - meter.last_reading).toFixed(3).replace('.', ',')} м³` : '-';
+
             profileHTML += `<div class="meter-card"><h4>${meter.meter_type === 'ГВС' ? '🔥' : '❄️'} ${meter.meter_type} (№ ${meter.factory_number})</h4>
                 <p><strong>Дата поверки:</strong> ${meter.checkup_date}</p>
                 <p><strong>Показания (прошлый месяц) от ${meter.initial_reading_date}:</strong> <code>${lastReadingStr}</code></p>
@@ -347,21 +369,36 @@ function renderProfilePage(data) {
                 <p><strong>Расход за текущий период:</strong> <code>${consumption}</code></p></div>`;
         });
     } else { profileHTML += `<p>Счетчики не найдены.</p>`; }
+
     profileHTML += `</div>
-        <div class="button-grid" style="gap: 15px;">
+        <div class="button-grid" style="gap: 15px; grid-template-columns: 1fr 1fr;">
             <button class="grid-button" onclick="openEmailModal()">${emailButtonText}</button>
-            <button class="full-width-button" onclick="handleResetClick()" style="background-color: #d9534f;">❌ Сменить квартиру</button>
+            <button class="grid-button" onclick="openPhoneModal()">${phoneButtonText}</button>
+            <button class="full-width-button" onclick="handleResetClick()" style="background-color: #d9534f; grid-column: 1 / -1;">❌ Сменить квартиру</button>
         </div>`;
     profileContainer.innerHTML = profileHTML;
 }
+
+function closeModal() { document.getElementById('modal-overlay').classList.add('hidden'); }
+
 function openEmailModal() {
-    document.getElementById('modal-input').value = appState.userData.user.email || '';
+    const modalInput = document.getElementById('modal-input');
+    const newModalInput = modalInput.cloneNode(true);
+    modalInput.parentNode.replaceChild(newModalInput, modalInput);
+    
+    document.getElementById('modal-title').textContent = 'Изменить Email';
+    document.getElementById('modal-text').textContent = 'Введите новый email или оставьте поле пустым, чтобы удалить его.';
+    newModalInput.type = 'email';
+    newModalInput.placeholder = 'user@example.com';
+    newModalInput.value = appState.userData.user.email || '';
+    
+    document.querySelector('.modal-button-confirm').onclick = submitEmailModal;
     document.getElementById('modal-overlay').classList.remove('hidden');
 }
-function closeModal() { document.getElementById('modal-overlay').classList.add('hidden'); }
-async function submitModal() {
+
+async function submitEmailModal() {
     const emailInput = document.getElementById('modal-input');
-    const newEmail = emailInput.value.trim() || null; // Если поле пустое, отправляем null
+    const newEmail = emailInput.value.trim() || null;
 
     if (newEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail)) {
         tg.showAlert('Неверный формат Email.'); 
@@ -375,15 +412,11 @@ async function submitModal() {
 
     try {
         await apiFetch('/api/update-email', { method: 'POST', body: JSON.stringify({ email: newEmail }) });
-        
         appState.userData.user.email = newEmail;
-
         tg.HapticFeedback.notificationOccurred('success');
         tg.showAlert('Email успешно обновлен!');
-        
         closeModal();
         renderProfilePage(appState.userData);
-
     } catch (error) { 
         tg.showAlert(`❌ Ошибка: ${error.message}`);
     } finally {
@@ -391,6 +424,54 @@ async function submitModal() {
         confirmButton.disabled = false;
     }
 }
+
+function openPhoneModal() {
+    const modalInput = document.getElementById('modal-input');
+    const newModalInput = modalInput.cloneNode(true);
+    modalInput.parentNode.replaceChild(newModalInput, modalInput);
+    
+    document.getElementById('modal-title').textContent = 'Изменить Телефон';
+    document.getElementById('modal-text').textContent = 'Введите новый номер или оставьте поле пустым, чтобы удалить его.';
+    newModalInput.type = 'tel';
+    newModalInput.placeholder = '+7 (___) ___-__-__';
+    newModalInput.value = appState.userData.user.phone || '';
+    
+    applyPhoneMask(newModalInput); 
+    
+    document.querySelector('.modal-button-confirm').onclick = submitPhoneModal;
+    document.getElementById('modal-overlay').classList.remove('hidden');
+}
+
+async function submitPhoneModal() {
+    const phoneInput = document.getElementById('modal-input');
+    const newPhone = phoneInput.value.trim() || null;
+    const phoneDigits = newPhone ? newPhone.replace(/\D/g, '') : '';
+
+    if (newPhone && phoneDigits.length !== 11) {
+        tg.showAlert('Номер телефона должен состоять из 11 цифр.');
+        return;
+    }
+
+    const confirmButton = document.querySelector('.modal-button-confirm');
+    const originalButtonText = confirmButton.textContent;
+    confirmButton.textContent = 'Сохранение...';
+    confirmButton.disabled = true;
+
+    try {
+        await apiFetch('/api/update-phone', { method: 'POST', body: JSON.stringify({ phone: newPhone }) });
+        appState.userData.user.phone = newPhone;
+        tg.HapticFeedback.notificationOccurred('success');
+        tg.showAlert('Телефон успешно обновлен!');
+        closeModal();
+        renderProfilePage(appState.userData);
+    } catch (error) {
+        tg.showAlert(`❌ Ошибка: ${error.message}`);
+    } finally {
+        confirmButton.textContent = originalButtonText;
+        confirmButton.disabled = false;
+    }
+}
+
 function handleResetClick() {
     tg.showConfirm("Вы уверены, что хотите сменить квартиру?", async (ok) => {
         if (!ok) return;
