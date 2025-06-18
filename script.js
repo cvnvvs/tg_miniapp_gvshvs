@@ -1,4 +1,4 @@
-const API_BASE_URL = 'https://bunny-brave-externally.ngrok-free.app/'; 
+const API_BASE_URL = 'https://bunny-brave-externally.ngrok-free.app'; 
 
 const tg = window.Telegram.WebApp;
 
