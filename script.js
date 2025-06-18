@@ -1,4 +1,4 @@
-const API_BASE_URL = 'https://cvnvvs.ru'; 
+const API_BASE_URL = 'https://bunny-brave-externally.ngrok-free.app/'; 
 
 const tg = window.Telegram.WebApp;
 
@@ -6,7 +6,7 @@ let appState = { userData: null, regData: {} };
 
 async function apiFetch(endpoint, options = {}) {
     const isPrivate = options.private !== false;
-    const headers = { 'Content-Type': 'application/json'};
+    const headers = { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true'};
     if (isPrivate) {
         if (!tg.initData) throw new Error("Нет данных для авторизации.");
         headers['Authorization'] = `tma ${tg.initData}`;
