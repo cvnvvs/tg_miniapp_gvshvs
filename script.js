@@ -27,7 +27,17 @@ document.addEventListener('DOMContentLoaded', () => {
     tg.expand();
     tg.MainButton.hide();
     document.body.style.visibility = 'visible';
-    initialize();
+
+    // Telegram WebApp может быть не готов сразу — ждём
+    if (tg.initData && tg.initData.length > 0) {
+        console.log('[DEBUG] tg.initData (немедленно):', tg.initData);
+        initialize();
+    } else {
+        setTimeout(() => {
+            console.log('[DEBUG] tg.initData (с задержкой):', tg.initData);
+            initialize();
+        }, 150); // задержка, чтобы точно успело всё прогрузиться
+    }
 });
 
 function initialize() {
@@ -489,3 +499,4 @@ function setHeader(t, a) { document.getElementById('header-title').textContent =
 function showLoader() { document.querySelectorAll('.page').forEach(p => p.classList.remove('active')); document.getElementById('loader-container').classList.add('active'); tg.MainButton.hide(); }
 function hideLoader() { document.getElementById('loader-container').classList.remove('active'); }
 function handleError(m) { hideLoader(); const c = document.getElementById('error-container'); c.classList.add('active'); c.innerHTML = `<p style="text-align: center; color: red;">${m}</p>`; tg.MainButton.hide(); }
+
