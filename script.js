@@ -96,7 +96,8 @@ async function handleApartmentSubmit() {
     appState.regData.apartment = apartment;
     tg.MainButton.showProgress().disable();
     try {
-        await apiFetch('/api/check-address', { method: 'POST', body: JSON.stringify(appState.regData)}, console.log(`[DEBUG] Fetch to ${endpoint}`, config));
+        console.log('[DEBUG] Отправка запроса на проверку адреса:', appState.regData);
+        await apiFetch('/api/check-address', { method: 'POST', body: JSON.stringify(appState.regData), private: false});
         renderAccountStep();
     } catch (error) { tg.showAlert(error.message);
     } finally { tg.MainButton.hideProgress().enable(); }
@@ -499,6 +500,7 @@ function setHeader(t, a) { document.getElementById('header-title').textContent =
 function showLoader() { document.querySelectorAll('.page').forEach(p => p.classList.remove('active')); document.getElementById('loader-container').classList.add('active'); tg.MainButton.hide(); }
 function hideLoader() { document.getElementById('loader-container').classList.remove('active'); }
 function handleError(m) { hideLoader(); const c = document.getElementById('error-container'); c.classList.add('active'); c.innerHTML = `<p style="text-align: center; color: red;">${m}</p>`; tg.MainButton.hide(); }
+
 
 
 
